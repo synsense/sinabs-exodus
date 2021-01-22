@@ -8,7 +8,8 @@ import numpy as np
 
 # Network parameters
 t_sim = 100
-n_neurons = (1, )
+batch_size = 1
+n_neurons = (batch_size, 1, 1)
 tau_mem = 10
 tau_syn = [15, 2]
 
@@ -37,7 +38,7 @@ scaleRho = 1.0
 ref_kernel = (exp_kernel(tau_mem, dt=1.0)*threshold).to(device)
 
 vmem_copy = vmem.clone()
-vmem_copy = vmem_copy.reshape(1, 1, *n_neurons, t_sim).contiguous()
+vmem_copy = vmem_copy.reshape(*n_neurons, t_sim).contiguous()  # Expects atleast 4 dimensional tensor
 
 
 plt.figure()
