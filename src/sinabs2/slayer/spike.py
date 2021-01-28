@@ -6,7 +6,6 @@ class SpikeFunction(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, membranePotential, refractoryResponse, threshold, tauRho, scaleRho):
-        print(membranePotential.shape)
         threshold = threshold
 
         spikes = slayerCuda.getSpikes(membranePotential.contiguous(), refractoryResponse, threshold, 1.0)

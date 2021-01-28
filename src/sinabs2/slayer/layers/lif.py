@@ -42,8 +42,9 @@ class SpikingLayer(nn.Module):
         super().__init__()
         # Initialize neuron states
         self.threshold = threshold
-        epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0)
-        ref_kernel = (exp_kernel(tau_mem, dt=1.0) * threshold)
+        kernel_length = 100
+        epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0, size=kernel_length)
+        ref_kernel = exp_kernel(tau_mem, dt=1.0, size=kernel_length) * threshold
 
         # Blank parameter place holders
         self.register_buffer("epsp_kernel", epsp_kernel)
@@ -53,25 +54,6 @@ class SpikingLayer(nn.Module):
             batch_size = 1
         self.batch_size = batch_size
         self.n_syn = len(tau_syn)
-
-    def reset_states(self, shape=None, randomize=False):
-        """
-        Reset the state of all neurons in this layer
-        """
-        raise NotImplementedError()
-        device = self.vmem.device
-        if shape is None:
-            vmem_shape = self.vmem.shape
-        else:
-            vmem_shape = (self.batch_size, *shape[2:])  # Leave out batch_size and n_syn
-        syn_shape = (self.batch_size, self.n_syn, *vmem_shape[1:])
-
-        if randomize:
-            self.vmem = torch.rand(vmem_shape, device=device)
-            self.isyn = torch.rand(syn_shape, device=device)
-        else:
-            self.vmem = torch.zeros(vmem_shape, device=device)
-            self.isyn = torch.rand(syn_shape, device=device)
 
     def synaptic_output(self, input_spikes: torch.Tensor) -> torch.Tensor:
         """
@@ -90,7 +72,6 @@ class SpikingLayer(nn.Module):
         t_sim = syn_out.shape[-1]  # Last dimension is time
         vsyn = generateEpsp(syn_out, self.epsp_kernel, t_sim)
         vmem = vsyn.sum(0).clone()
-        print(vmem.shape)
 
         tauRho = 1.0
         scaleRho = 1.0

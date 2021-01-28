@@ -41,17 +41,14 @@ def build_sinabs_model(tau_syn, tau_mem, n_channels=16, n_classes=10, batch_size
             shape = out.shape
             out = out.view((*shape[:-1], self.n_syn, shape[-1]//self.n_syn))
             out = self.spk1(out)
-            print(out.shape)
             out = self.lin2(out)
             shape = out.shape
             out = out.view((*shape[:-1], self.n_syn, shape[-1]//self.n_syn))
             out = self.spk2(out)
-            print(out.shape)
             out = self.lin3(out)
             shape = out.shape
             out = out.view((*shape[:-1], self.n_syn, shape[-1]//self.n_syn ))
             out = self.spk3(out)
-            print(out.shape)
             return out
 
     return TestModel()
@@ -69,7 +66,6 @@ def test_sinabs_model():
     tau_syn = np.array([5.0, 15.0])
     model = build_sinabs_model(tau_syn, tau_mem, n_channels=n_channels, n_classes=n_classes, batch_size=1).to(device)
     input_data = torch.rand((batch_size, t_sim, n_channels)).to(device).reshape((-1, n_channels))
-    print(input_data.shape)
     out = model(input_data)
     assert out.shape == (batch_size*t_sim, n_classes)
 
@@ -94,19 +90,13 @@ def build_slayer_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size
 
         def forward(self, data):
             # reshape to (time, batch, dim, n_channels)
-            print(data.shape)
             out = data.movedim(-1, 0)
-            print(out.shape)
             out = self.lin1(out)
             # reshape to (n_syn, batch, dim, n_channels, time)
             shape = out.shape
-            print(out.shape)
             out = out.view((*shape[:-1], self.n_syn, shape[-1]//self.n_syn))
-            print(out.shape)
             out = out.movedim(0, -1)
-            print(out.shape)
             out = out.movedim(-3, 0)
-            print(out.shape)
             out = self.spk1(out)
             out = out.movedim(-1, 0)
             out = self.lin2(out)
@@ -115,7 +105,6 @@ def build_slayer_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size
             out = out.view((*shape[:-1], self.n_syn, shape[-1]//self.n_syn))
             out = out.movedim(0, -1)
             out = out.movedim(-3, 0)
-            print(out.shape)
             out = self.spk2(out)
             out = out.movedim(-1, 0)
             out = self.lin3(out)
@@ -124,7 +113,6 @@ def build_slayer_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size
             out = out.view((*shape[:-1], self.n_syn, shape[-1]//self.n_syn))
             out = out.movedim(0, -1)
             out = out.movedim(-3, 0)
-            print(out.shape)
             out = self.spk3(out)
             return out
 
@@ -149,34 +137,44 @@ def test_slayer_model():
     assert out.shape == (batch_size, n_dims, 1, n_classes, t_sim)
 
 
-def test_speed_compare():
+def test_slayer_vs_sinabs_compare():
     import torch
     import numpy as np
     t_sim = 100
     n_channels = 16
-    n_dims = 1
     batch_size = 1
     n_classes = 10
     device = "cuda:0"
-    tau_mem = 10
-    tau_syn = np.array([5.0, 15.0])
+
+    tau_mem = 90.
+    tau_syn = np.array([70.0, 70.0])
     # Define inputs
-    input_data = (torch.rand((batch_size, n_dims, n_channels, t_sim)) > 0.9).float().to(device)
-    input_data_sinabs = input_data.movedim(-1, 1).reshape((-1, n_dims, n_channels))
+    input_data = (torch.rand((batch_size, n_channels, t_sim)) > 0.95).float().to(device)
+    #input_data = torch.zeros((batch_size, n_channels, t_sim)).float().to(device)
+    #input_data[0, 0, 10] = 1.0  # One spike inserted
+    input_data_sinabs = input_data.movedim(-1, 1).reshape((-1, n_channels))
+    input_data_slayer = input_data.unsqueeze(1).unsqueeze(1)  # Add an additional dimension to input
+    assert len(input_data_slayer.shape) == 5
 
     # Define models
     slayer_model = build_slayer_model(tau_mem, tau_syn, n_channels=n_channels, n_classes=n_classes, batch_size=1).to(device)
     sinabs_model = build_sinabs_model(tau_syn, tau_mem, n_channels=n_channels, n_classes=n_classes, batch_size=1).to(device)
 
-    assert(input_data.sum() == input_data_sinabs.sum())
+    assert(input_data_slayer.sum() == input_data_sinabs.sum())
+
+    def scale_all_weights_by_x(model, x):
+        for param in model.parameters():
+            param.data = param.data*x
+
+    scale_all_weights_by_x(sinabs_model, 0.1)
 
     # Copy parameters
     slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
-    slayer_model.lin2.weight.data = sinabs_model.lin1.weight.data.clone()
-    slayer_model.lin3.weight.data = sinabs_model.lin1.weight.data.clone()
+    slayer_model.lin2.weight.data = sinabs_model.lin2.weight.data.clone()
+    slayer_model.lin3.weight.data = sinabs_model.lin3.weight.data.clone()
 
     sinabs_out = sinabs_model(input_data_sinabs)
-    slayer_out = slayer_model(input_data)
+    slayer_out = slayer_model(input_data_slayer)
 
 
     print("Sinabs model: ", sinabs_out.sum())
@@ -185,4 +183,12 @@ def test_speed_compare():
 
     print(sinabs_model.spk1.vmem_rec.shape)
     print(slayer_model.spk1.vmem.shape)
-    assert sinabs_out.sum() == slayer_out.sum()
+
+    # Plot data
+    import matplotlib.pyplot as plt
+    plt.plot(sinabs_model.spk1.vmem_rec[:, 0, 0].detach().cpu(), label="sinabs")
+    plt.plot(slayer_model.spk1.vmem[0,0,0,0].detach().cpu(), label="Slayer")
+    plt.legend()
+    plt.show()
+
+    assert (sinabs_out.sum() - slayer_out.sum()) <= 5*sinabs_out.sum()/100.0
