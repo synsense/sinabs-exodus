@@ -139,15 +139,16 @@ def test_slayer_model():
 
 def test_slayer_vs_sinabs_compare():
     import torch
+    import time
     import numpy as np
-    t_sim = 100
+    t_sim = 500
     n_channels = 16
-    batch_size = 1
+    batch_size = 100
     n_classes = 10
     device = "cuda:0"
 
-    tau_mem = 90.
-    tau_syn = np.array([70.0, 70.0])
+    tau_mem = 50.
+    tau_syn = np.array([50.0, 50.0])
     # Define inputs
     input_data = (torch.rand((batch_size, n_channels, t_sim)) > 0.95).float().to(device)
     #input_data = torch.zeros((batch_size, n_channels, t_sim)).float().to(device)
@@ -157,8 +158,8 @@ def test_slayer_vs_sinabs_compare():
     assert len(input_data_slayer.shape) == 5
 
     # Define models
-    slayer_model = build_slayer_model(tau_mem, tau_syn, n_channels=n_channels, n_classes=n_classes, batch_size=1).to(device)
-    sinabs_model = build_sinabs_model(tau_syn, tau_mem, n_channels=n_channels, n_classes=n_classes, batch_size=1).to(device)
+    slayer_model = build_slayer_model(tau_mem, tau_syn, n_channels=n_channels, n_classes=n_classes, batch_size=batch_size).to(device)
+    sinabs_model = build_sinabs_model(tau_syn, tau_mem, n_channels=n_channels, n_classes=n_classes, batch_size=batch_size).to(device)
 
     assert(input_data_slayer.sum() == input_data_sinabs.sum())
 
@@ -166,15 +167,24 @@ def test_slayer_vs_sinabs_compare():
         for param in model.parameters():
             param.data = param.data*x
 
-    scale_all_weights_by_x(sinabs_model, 0.1)
+    scale_all_weights_by_x(sinabs_model, 0.04)
 
     # Copy parameters
     slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
     slayer_model.lin2.weight.data = sinabs_model.lin2.weight.data.clone()
     slayer_model.lin3.weight.data = sinabs_model.lin3.weight.data.clone()
 
+
+    t_start = time.time()
     sinabs_out = sinabs_model(input_data_sinabs)
+    t_stop = time.time()
+    print(f"Runtime sinabs: {t_stop - t_start}")
+
+    t_start = time.time()
     slayer_out = slayer_model(input_data_slayer)
+    t_stop = time.time()
+    print(f"Runtime slayer: {t_stop - t_start}")
+
 
 
     print("Sinabs model: ", sinabs_out.sum())
@@ -191,4 +201,4 @@ def test_slayer_vs_sinabs_compare():
     plt.legend()
     plt.show()
 
-    assert (sinabs_out.sum() - slayer_out.sum()) <= 5*sinabs_out.sum()/100.0
+    assert abs(sinabs_out.sum() - slayer_out.sum()) <= 5*sinabs_out.sum()/100.0
