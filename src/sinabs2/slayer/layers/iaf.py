@@ -17,4 +17,4 @@ class SpikingLayer:
 
     def forward(self, vmem):
         t_sim = len(vmem)
-        output_spikes = spikeFunction.apply(vmem, self.-ref_kernel, self.threshold, t_sim, self.tauRho, self.scaleRho)
+        output_spikes = spikeFunction.apply(vmem, -self.ref_kernel, self.threshold, t_sim, self.tauRho, self.scaleRho)

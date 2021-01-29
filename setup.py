@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from torch.utils import cpp_extension
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
@@ -12,7 +12,9 @@ else:
     os.environ["CXX"] = "c++"
 
 setup(
-    name='sinabsslayerCuda',
+    name='sinabs2',
+    packages=["sinabs2", "sinabs2.slayer", "sinabs2.slayer.layers"],
+    package_dir={'sinabs2': 'src/sinabs2'},
     ext_modules=[
         CUDAExtension(
             name='sinabsslayerCuda',

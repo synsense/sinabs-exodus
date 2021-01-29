@@ -2,11 +2,11 @@ import torch
 import numpy as np
 import torch.nn as nn
 from typing import Optional, Union, List, Tuple
-from src.sinabs2.slayer.kernels import psp_kernels, exp_kernel
-from src.sinabs2.slayer.spike import spikeFunction
+from sinabs2.slayer.kernels import psp_kernels, exp_kernel
+from sinabs2.slayer.spike import spikeFunction
 
 # - Type alias for array-like objects
-from src.sinabs2.slayer.psp import generateEpsp
+from sinabs2.slayer.psp import generateEpsp
 
 ArrayLike = Union[np.ndarray, List, Tuple]
 
@@ -43,7 +43,7 @@ class SpikingLayer(nn.Module):
         # Initialize neuron states
         self.threshold = threshold
         epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0)
-        ref_kernel = exp_kernel(tau_mem, dt=1.0) * threshold
+        ref_kernel = (exp_kernel(tau_mem, dt=1.0) * threshold)
 
         # Blank parameter place holders
         self.register_buffer("epsp_kernel", epsp_kernel)
@@ -69,7 +69,7 @@ class SpikingLayer(nn.Module):
         # Compute the synaptic current
         syn_out: torch.Tensor = self.synaptic_output(binary_input)
         t_sim = syn_out.shape[-1]  # Last dimension is time
-        vsyn = generateEpsp(syn_out, self.epsp_kernel, t_sim)
+        vsyn = generateEpsp(syn_out, self.epsp_kernel)
         vmem = vsyn.sum(0).clone()
 
         tauRho = 1.0

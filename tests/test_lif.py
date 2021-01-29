@@ -1,6 +1,6 @@
 def test_lif_inference():
     import torch
-    from src.sinabs2.slayer.layers.lif import SpikingLayer
+    from sinabs2.slayer.layers.lif import SpikingLayer
 
     t_sim = 100
     tau_mem = 10
@@ -72,7 +72,7 @@ def test_sinabs_model():
 
 def build_slayer_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size=1):
     import torch.nn as nn
-    from src.sinabs2.slayer.layers.lif import SpikingLayer
+    from sinabs2.slayer.layers.lif import SpikingLayer
 
     threshold = 1.0
 

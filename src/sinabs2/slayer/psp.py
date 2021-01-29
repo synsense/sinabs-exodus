@@ -2,36 +2,37 @@ import torch
 import sinabsslayerCuda
 
 
-def generateEpsp(input_spikes, epsp_kernel, t_sim):
+def generateEpsp(input_spikes, epsp_kernel):
     out = []
     if len(epsp_kernel.shape) == 1:
         out.append(pspFunction.apply(input_spikes, epsp_kernel, 1))
     if len(epsp_kernel.shape) == 2:
         for i, k in enumerate(epsp_kernel):
-            out.append(pspFunction.apply(input_spikes[i], k, 1))
+            out.append(pspFunction(input_spikes[i], k))
 
     return torch.stack(out)
 
 
-class pspFunction(torch.autograd.Function):
+class PspFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, spike, filter, Ts):
+    def forward(ctx, spike, filter):
         device = spike.device
         dtype = spike.dtype
-        psp = sinabsslayerCuda.conv(spike.contiguous(), filter, Ts)
-        Ts = torch.autograd.Variable(torch.tensor(Ts, device=device, dtype=dtype), requires_grad=False)
-        ctx.save_for_backward(filter, Ts)
+        psp = sinabsslayerCuda.conv(spike.contiguous(), filter, 1)
+        ctx.save_for_backward(filter)
         return psp
 
     @staticmethod
     def backward(ctx, gradOutput):
-        (filter, Ts) = ctx.saved_tensors
-        gradInput = sinabsslayerCuda.corr(gradOutput.contiguous(), filter, Ts)
+        (filter, ) = ctx.saved_tensors
+        gradInput = sinabsslayerCuda.corr(gradOutput.contiguous(), filter, 1)
         if filter.requires_grad is False:
             gradFilter = None
         else:
             gradFilter = None
             pass
 
-        return gradInput, gradFilter, None
+        return gradInput, gradFilter
 
+
+pspFunction = PspFunction().apply

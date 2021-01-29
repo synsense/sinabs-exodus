@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('TkAgg')
 import torch
 from src.sinabs2.slayer.kernels import psp_kernels, exp_kernel
 from src.sinabs2.slayer.psp import generateEpsp
@@ -23,7 +25,7 @@ input_spikes = (torch.rand(n_syn, *n_neurons, t_sim) < 0.1).float().to(device)
 epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0).to(device)
 
 # Generate synaptic currents
-vsyn = generateEpsp(input_spikes, epsp_kernel, t_sim)
+vsyn = generateEpsp(input_spikes, epsp_kernel)
 # TODO: Weighted sum of synaptic currents using some linear or convolutional weights
 vmem = vsyn.sum(0)
 
