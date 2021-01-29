@@ -1,5 +1,5 @@
 import torch
-import slayerCuda
+import sinabsslayerCuda
 
 
 class SpikeFunction(torch.autograd.Function):
@@ -8,7 +8,7 @@ class SpikeFunction(torch.autograd.Function):
     def forward(ctx, membranePotential, refractoryResponse, threshold, tauRho, scaleRho):
         threshold = threshold
 
-        spikes = slayerCuda.getSpikes(membranePotential.contiguous(), refractoryResponse, threshold, 1.0)
+        spikes = sinabsslayerCuda.getSpikes(membranePotential.contiguous(), refractoryResponse, threshold, 1.0)
         pdfScale = scaleRho
         pdfTimeConstant = tauRho * threshold
         ctx.threshold = threshold

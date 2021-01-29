@@ -18,7 +18,7 @@ def test_lif_inference():
     assert(output.shape == input_data.shape)
 
 
-def build_sinabs_model(tau_syn, tau_mem, n_channels=16, n_classes=10, batch_size=1):
+def build_sinabs_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size=1):
     import torch.nn as nn
     from sinabs.layers.cpp.lif_bptt import SpikingLayer
 
@@ -151,15 +151,13 @@ def test_slayer_vs_sinabs_compare():
     tau_syn = np.array([50.0, 50.0])
     # Define inputs
     input_data = (torch.rand((batch_size, n_channels, t_sim)) > 0.95).float().to(device)
-    #input_data = torch.zeros((batch_size, n_channels, t_sim)).float().to(device)
-    #input_data[0, 0, 10] = 1.0  # One spike inserted
     input_data_sinabs = input_data.movedim(-1, 1).reshape((-1, n_channels))
     input_data_slayer = input_data.unsqueeze(1).unsqueeze(1)  # Add an additional dimension to input
     assert len(input_data_slayer.shape) == 5
 
     # Define models
     slayer_model = build_slayer_model(tau_mem, tau_syn, n_channels=n_channels, n_classes=n_classes, batch_size=batch_size).to(device)
-    sinabs_model = build_sinabs_model(tau_syn, tau_mem, n_channels=n_channels, n_classes=n_classes, batch_size=batch_size).to(device)
+    sinabs_model = build_sinabs_model(tau_mem, tau_syn, n_channels=n_channels, n_classes=n_classes, batch_size=batch_size).to(device)
 
     assert(input_data_slayer.sum() == input_data_sinabs.sum())
 
