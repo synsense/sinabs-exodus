@@ -1,5 +1,6 @@
 import matplotlib
-matplotlib.use('TkAgg')
+
+matplotlib.use("TkAgg")
 import torch
 from src.sinabs2.slayer.kernels import psp_kernels, exp_kernel
 from src.sinabs2.slayer.psp import generateEpsp
@@ -31,10 +32,10 @@ vmem = vsyn.sum(0)
 
 # Spiking and learning parameters
 threshold = 5.0
-tau_ref = tau_mem*5
+tau_ref = tau_mem * 5
 tauRho = 2.0
 scaleRho = 1.0
-ref_kernel = (exp_kernel(tau_ref, dt=1.0)*threshold).to(device)
+ref_kernel = (exp_kernel(tau_ref, dt=1.0) * threshold).to(device)
 
 vmem_copy = vmem.clone().contiguous()
 # Expects atleast 5 dimensional tensor (batch, feature, height, width, time)
@@ -42,11 +43,11 @@ vmem_copy = vmem.clone().contiguous()
 
 plt.figure()
 plt.plot(epsp_kernel.cpu().numpy().T, label="EPSP Kernels")
-plt.plot(ref_kernel.cpu().numpy().T/threshold, label="refractory kernel")
+plt.plot(ref_kernel.cpu().numpy().T / threshold, label="refractory kernel")
 plt.legend()
 
 # Generate output spikes
-output_spikes = spikeFunction(vmem_copy, -ref_kernel, threshold, tauRho, scaleRho)
+output_spikes = spikeFunction(vmem_copy, -ref_kernel, threshold, tauRho)
 # print(np.where(output_spikes.squeeze().cpu().numpy()))
 print(output_spikes)
 
@@ -55,7 +56,7 @@ print(output_spikes)
 
 plt.figure()
 plt.plot(epsp_kernel.cpu().numpy().T, label="EPSP Kernels")
-plt.plot(ref_kernel.cpu().numpy().T/threshold, label="refractory kernel")
+plt.plot(ref_kernel.cpu().numpy().T / threshold, label="refractory kernel")
 plt.plot(output_spikes.cpu().squeeze().numpy(), label="output_spikes")
 plt.legend()
 
