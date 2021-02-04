@@ -11,7 +11,7 @@
 
 // C++ Python interface
 
-torch::Tensor getSpikesCuda(
+torch::autograd::tensor_list  getSpikesCuda(
 	torch::Tensor d_u,
 	const torch::Tensor& d_nu,
 	const float theta,
@@ -24,6 +24,7 @@ torch::Tensor getSpikesCuda(
 	CHECK_DEVICE(d_u, d_nu);
 
 	auto d_s = torch::zeros_like(d_u);
+	auto vmem_before_spikes = torch::zeros_like(d_u);
 
 	// TODO implement for different data types
 
@@ -33,9 +34,9 @@ torch::Tensor getSpikesCuda(
 	unsigned nuSize = d_nu.size(-1);
 	unsigned Ns = d_u.size(-1);
 	unsigned nNeurons = d_u.size(0) * d_u.size(1) * d_u.size(2) * d_u.size(3);
-	getSpikes<float>(d_s.data<float>(), d_u.data<float>(), d_nu.data<float>(), nNeurons, nuSize, Ns, theta, Ts);
+	getSpikes<float>(d_s.data<float>(), d_u.data<float>(), vmem_before_spikes.data<float>(), d_nu.data<float>(), nNeurons, nuSize, Ns, theta, Ts);
 
-	return d_s;
+	return {d_s, vmem_before_spikes};
 }
 
 torch::Tensor convCuda(torch::Tensor input, torch::Tensor filter, float Ts)

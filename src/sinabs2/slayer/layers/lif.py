@@ -19,7 +19,7 @@ class SpikingLayer(nn.Module):
             tau_mem: float = 10.0,
             tau_syn: List[float] = [5.0, ],
             threshold: float = 1.0,
-            batch_size: Optional[int] = None,
+            tau_learning: float = 0.5,
     ):
         """
         Pytorch implementation of a spiking neuron with learning enabled.
@@ -35,23 +35,18 @@ class SpikingLayer(nn.Module):
             Number of synapses per neuron
         threshold:
             Spiking threshold of the neuron.
-
-        batch_size:
-            The batch size. Needed to distinguish between timesteps and batch dimension.
         """
         super().__init__()
         # Initialize neuron states
         self.threshold = threshold
         epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0)
         ref_kernel = (exp_kernel(tau_mem, dt=1.0) * threshold)
+        self.tau_learning = tau_learning 
 
         # Blank parameter place holders
         self.register_buffer("epsp_kernel", epsp_kernel)
         self.register_buffer("ref_kernel", ref_kernel)
         self.spikes_number = None
-        if batch_size is None:
-            batch_size = 1
-        self.batch_size = batch_size
         self.n_syn = len(tau_syn)
 
     def synaptic_output(self, input_spikes: torch.Tensor) -> torch.Tensor:
@@ -66,20 +61,26 @@ class SpikingLayer(nn.Module):
 
     def forward(self, binary_input: torch.Tensor):
 
+        # expected input dimension: (t_sim, n_batches, n_syn, n_channels)
+        binary_input = binary_input.movedim(0, -1) # move t_sim to last dimension (n_batches, n_syn, n_channels, t_sim)
+        binary_input = binary_input.movedim(1, 0) # move n_syn to first dimension (n_syn, n_batches, n_channels, t_sim)
+        binary_input = binary_input.unsqueeze(1).unsqueeze(1) # unsqueeze twice at dim 1 (n_syn, 1, 1, n_batches, n_channels, t_sim) 
+
         # Compute the synaptic current
         syn_out: torch.Tensor = self.synaptic_output(binary_input)
         t_sim = syn_out.shape[-1]  # Last dimension is time
         vsyn = generateEpsp(syn_out, self.epsp_kernel)
-        vmem = vsyn.sum(0).clone()
+        vmem = vsyn.sum(0)
 
-        tauRho = 1.0
-        scaleRho = 1.0
-        all_spikes = spikeFunction(vmem, -self.ref_kernel, self.threshold, tauRho, scaleRho)
+        assert(len(vmem.shape) == 5)
+        all_spikes = spikeFunction(vmem, -self.ref_kernel, self.threshold, self.tau_learning)
 
         self.vmem = vmem
         self.tw = t_sim
         self.activations = all_spikes
         self.spikes_number = all_spikes.sum()
+
+        all_spikes = all_spikes.squeeze(0).squeeze(0).movedim(-1, 0) # move time back to front (t_sim, n_batches, n_channels)
 
         return all_spikes
 
