@@ -7,13 +7,13 @@ class SpikeFunction(torch.autograd.Function):
     def forward(ctx, membranePotential, refractoryResponse, threshold, tauRho):
         threshold = threshold
 
-        spikes, vmem_before_spikes = sinabsslayerCuda.getSpikes(
+        spikes = sinabsslayerCuda.getSpikes(
             membranePotential.contiguous(), refractoryResponse, threshold, 1.0
         )
         pdfTimeConstant = tauRho * threshold
         ctx.threshold = threshold
         ctx.pdfTimeConstant = pdfTimeConstant
-        ctx.save_for_backward(vmem_before_spikes)
+        ctx.save_for_backward(membranePotential)
 
         return spikes
 

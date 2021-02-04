@@ -11,11 +11,7 @@
 
 // C++ Python interface
 
-torch::autograd::tensor_list  getSpikesCuda(
-	torch::Tensor d_u,
-	const torch::Tensor& d_nu,
-	const float theta,
-	const float Ts)
+torch::Tensor getSpikesCuda(torch::Tensor d_u, const torch::Tensor& d_nu, const float theta, const float Ts)
 {
 	CHECK_INPUT(d_u);
 	CHECK_INPUT(d_nu);
@@ -24,7 +20,6 @@ torch::autograd::tensor_list  getSpikesCuda(
 	CHECK_DEVICE(d_u, d_nu);
 
 	auto d_s = torch::zeros_like(d_u);
-	auto vmem_before_spikes = torch::zeros_like(d_u);
 
 	// TODO implement for different data types
 
@@ -34,9 +29,9 @@ torch::autograd::tensor_list  getSpikesCuda(
 	unsigned nuSize = d_nu.size(-1);
 	unsigned Ns = d_u.size(-1);
 	unsigned nNeurons = d_u.size(0) * d_u.size(1) * d_u.size(2) * d_u.size(3);
-	getSpikes<float>(d_s.data<float>(), d_u.data<float>(), vmem_before_spikes.data<float>(), d_nu.data<float>(), nNeurons, nuSize, Ns, theta, Ts);
+	getSpikes<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), d_nu.data_ptr<float>(), nNeurons, nuSize, Ns, theta, Ts);
 
-	return {d_s, vmem_before_spikes};
+	return d_s;
 }
 
 torch::Tensor convCuda(torch::Tensor input, torch::Tensor filter, float Ts)
@@ -47,12 +42,12 @@ torch::Tensor convCuda(torch::Tensor input, torch::Tensor filter, float Ts)
 
 	cudaSetDevice(input.device().index());
 
-	auto output = torch::zeros_like(input);
-	
-	unsigned signalSize = input.size(-1); 
+	auto output = torch::empty_like(input);
+
+	unsigned signalSize = input.size(-1);
 	unsigned filterSize = filter.numel();
-	unsigned nNeurons   = input.numel()/input.size(-1); 
-	conv<float>(output.data<float>(), input.data<float>(), filter.data<float>(), signalSize, filterSize, nNeurons, Ts);
+	unsigned nNeurons   = input.numel()/input.size(-1);
+	conv<float>(output.data_ptr<float>(), input.data_ptr<float>(), filter.data_ptr<float>(), signalSize, filterSize, nNeurons, Ts);
 
 	return output;
 }
@@ -65,12 +60,12 @@ torch::Tensor corrCuda(torch::Tensor input, torch::Tensor filter, float Ts)
 
 	cudaSetDevice(input.device().index());
 
-	auto output = torch::zeros_like(input);
-	
-	unsigned signalSize = input.size(-1); 
+	auto output = torch::empty_like(input);
+
+	unsigned signalSize = input.size(-1);
 	unsigned filterSize = filter.numel();
-	unsigned nNeurons   = input.numel()/input.size(-1); 
-	corr<float>(output.data<float>(), input.data<float>(), filter.data<float>(), signalSize, filterSize, nNeurons, Ts);
+	unsigned nNeurons   = input.numel()/input.size(-1);
+	corr<float>(output.data_ptr<float>(), input.data_ptr<float>(), filter.data_ptr<float>(), signalSize, filterSize, nNeurons, Ts);
 
 	return output;
 }
@@ -83,26 +78,26 @@ torch::Tensor shiftCuda(torch::Tensor input, torch::Tensor shiftLUT, float Ts)
 
 	cudaSetDevice(input.device().index());
 
-	auto output = torch::zeros_like(input);
+	auto output = torch::empty_like(input);
 
 	if(shiftLUT.numel() == 1)
 	{
 		unsigned signalSize = input.size(-1);
 		unsigned nNeurons   = input.numel()/signalSize;
-		
+
 		float shiftValue = shiftLUT.item<float>();
-		
-		shift<float>(output.data<float>(), input.data<float>(), shiftValue, signalSize, nNeurons, Ts);		
+
+		shift<float>(output.data_ptr<float>(), input.data_ptr<float>(), shiftValue, signalSize, nNeurons, Ts);
 	}
 	else
 	{
 		unsigned signalSize = input.size(-1);
 		unsigned nBatch     = input.size(0);
 		unsigned nNeurons   = input.numel()/signalSize/nBatch;
-		
+
 		AT_ASSERTM(shiftLUT.numel() == nNeurons, "shift and number of neurons must be same");
-		
-		shift<float>(output.data<float>(), input.data<float>(), shiftLUT.data<float>(), signalSize, nNeurons, nBatch, Ts);
+
+		shift<float>(output.data_ptr<float>(), input.data_ptr<float>(), shiftLUT.data_ptr<float>(), signalSize, nNeurons, nBatch, Ts);
 	}
 
 	return output;
@@ -119,13 +114,13 @@ torch::Tensor shiftFlCuda(torch::Tensor input, float shiftLUT, float Ts)
 
 	cudaSetDevice(input.device().index());
 
-	auto output = torch::zeros_like(input);
+	auto output = torch::empty_like(input);
 
 	unsigned signalSize = input.size(-1);
 	unsigned nNeurons   = input.numel()/signalSize;
-	
-	shift<float>(output.data<float>(), input.data<float>(), shiftLUT, signalSize, nNeurons, Ts);		
-	
+
+	shift<float>(output.data_ptr<float>(), input.data_ptr<float>(), shiftLUT, signalSize, nNeurons, Ts);
+
 	return output;
 }
 

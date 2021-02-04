@@ -10,20 +10,17 @@ template <class T>
 __global__ void getSpikesKernel(
 	T* __restrict__ d_s,
 	T* __restrict__ d_u,
-	T* __restrict__ vmem_before_spikes,
 	const T* __restrict__ d_nu,
-	unsigned nNeurons, unsigned nuSize, unsigned Ns, 
-	float theta, float Ts)
+	unsigned nNeurons, unsigned nuSize, unsigned Ns, float theta, float Ts)
 {
 	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
 	const T spike = 1.0f/Ts;
-	
+
 	if(neuronID >= nNeurons)	return;
 
 	for(unsigned i=0; i<Ns; ++i)
 	{
 		unsigned linearID = i + neuronID * Ns;
-        vmem_before_spikes[linearID] = d_u[linearID];
 		if(d_u[linearID] >= theta)
 		{
             int num_spikes = d_u[linearID] / theta;
@@ -31,7 +28,7 @@ __global__ void getSpikesKernel(
 			// dynamic parallelism seems to be slower because of race condition!!!
 			// ahpKernel<<< block, thread >>>(d_u + linearID, d_nu, nuSize);
 			// cudaDeviceSynchronize();
-			for(unsigned j=0; j<nuSize; ++j)
+			for(unsigned j=1; j<nuSize; ++j)
 			{
 				if(i + j < Ns)	d_u[linearID + j] += d_nu[j] * num_spikes;
 			}
@@ -41,26 +38,25 @@ __global__ void getSpikesKernel(
 
 }
 
-
 template <class T>
 __global__ void evalRhoKernel(T* d_rho, const T* d_u, float theta, float tau, unsigned nNeurons, unsigned Ns, float scale)
 {
 	unsigned timeID = blockIdx.x * blockDim.x + threadIdx.x;
 	unsigned nID    = blockIdx.y * blockDim.y + threadIdx.y;
-	
+
 	if(timeID >= Ns || nID >= nNeurons)	return;
-	
+
 	unsigned linearID = timeID + nID * Ns;
-	
+
 	d_rho[linearID] = scale/tau * exp(-fabs(theta - d_u[linearID])/tau);
 }
 
 template <class T>
-void getSpikes(T* d_s, T* d_u, T* vmem_before_spikes, const T* d_nu, unsigned nNeurons, unsigned nuSize, unsigned Ns, float theta, float Ts)
+void getSpikes(T* d_s, T* d_u, const T* d_nu, unsigned nNeurons, unsigned nuSize, unsigned Ns, float theta, float Ts)
 {
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
-	getSpikesKernel<T><<< block, thread >>>(d_s, d_u, vmem_before_spikes, d_nu, nNeurons, nuSize, Ns, theta, Ts);
+	getSpikesKernel<T><<< block, thread >>>(d_s, d_u, d_nu, nNeurons, nuSize, Ns, theta, Ts);
 }
 
 template <class T>
@@ -73,9 +69,9 @@ void evalRho(T* d_rho, const T* d_u, float theta, float tauRho, float scaleRho, 
 	block.y = ceil(1.0f * nNeurons/thread.y);
 	if(block.y >= 65535)	AT_ERROR("maximum blockDim.y exceeded");
 	if(block.z >= 65535)	AT_ERROR("maximum blockDim.z exceeded");
-	
+
 	// slayerio::cout << "scaleRho = " << scaleRho << ", tauRho = " << tauRho << std::endl;
-	
+
 	// evalRhoKernel<<< block, thread >>>(rho, u, theta, tau, info.nNeurons, Ns);
 	// evalRhoKernel<<< block, thread >>>(rho, u, theta, tau, info.nNeurons, Ns, 1.0/10);
 	evalRhoKernel<<< block, thread >>>(d_rho, d_u, theta, tauRho * theta, nNeurons, Ns, scaleRho);
