@@ -77,11 +77,11 @@ class SpikingLayer(nn.Module):
 
         self.vmem = vmem
         self.tw = t_sim
-        self.activations = all_spikes
-        self.spikes_number = all_spikes.sum()
 
         all_spikes = all_spikes.squeeze(0).squeeze(0).movedim(-1, 0) # move time back to front (t_sim, n_batches, n_channels)
 
+        self.spikes_number = all_spikes.sum()
+        self.n_spikes_out = all_spikes
         return all_spikes
 
     def __deepcopy__(self, memo=None):
