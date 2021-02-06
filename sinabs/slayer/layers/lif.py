@@ -2,11 +2,11 @@ import torch
 import numpy as np
 import torch.nn as nn
 from typing import Optional, Union, List, Tuple
-from sinabs2.slayer.kernels import psp_kernels, exp_kernel
-from sinabs2.slayer.spike import spikeFunction
+from sinabs.slayer.kernels import psp_kernels, exp_kernel
+from sinabs.slayer.spike import spikeFunction
 
 # - Type alias for array-like objects
-from sinabs2.slayer.psp import generateEpsp
+from sinabs.slayer.psp import generateEpsp
 
 ArrayLike = Union[np.ndarray, List, Tuple]
 

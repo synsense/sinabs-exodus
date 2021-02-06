@@ -1,4 +1,4 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_namespace_packages
 from torch.utils import cpp_extension
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
@@ -12,19 +12,18 @@ else:
     os.environ["CXX"] = "c++"
 
 setup(
-    name='sinabs2',
-    packages=["sinabs2", "sinabs2.slayer", "sinabs2.slayer.layers"],
-    package_dir={'sinabs2': 'src/sinabs2'},
+    name='sinabs-slayer',
+    packages=['sinabs.slayer'],
     ext_modules=[
         CUDAExtension(
             name='sinabsslayerCuda',
             sources=[
-                'src/cuda/slayerKernels.cu'
+                'csrc/cuda/slayerKernels.cu'
             ],
             depends=[
-                'src/cuda/spikeKernels.h',
-                'src/cuda/convKernels.h',
-                'src/cuda/shiftKernels.h'
+                'csrc/cuda/spikeKernels.h',
+                'csrc/cuda/convKernels.h',
+                'csrc/cuda/shiftKernels.h'
             ],
             extra_compile_args={
                 'cxx': ['-g'],
