@@ -13,7 +13,7 @@ else:
 
 setup(
     name='sinabs-slayer',
-    packages=['sinabs.slayer'],
+    packages=['sinabs.slayer', 'sinabs.slayer.layers'],
     ext_modules=[
         CUDAExtension(
             name='sinabsslayerCuda',
@@ -27,7 +27,7 @@ setup(
             ],
             extra_compile_args={
                 'cxx': ['-g'],
-                'nvcc': ['-arch=sm_60', '-O2', '-use_fast_math']
+                'nvcc': ['-arch=sm_60', '-O3', '-use_fast_math']
             }
         )
     ],
