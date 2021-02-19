@@ -1,6 +1,6 @@
 def test_lif_inference():
     import torch
-    from sinabs2.slayer.layers.lif import SpikingLayer
+    from sinabs.slayer.layers.lif import SpikingLayer
 
     t_sim = 100
     tau_mem = 10
@@ -71,7 +71,7 @@ def test_sinabs_model():
 
 def build_slayer_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size=1):
     import torch.nn as nn
-    from sinabs2.slayer.layers.lif import SpikingLayer
+    from sinabs.slayer.layers.lif import SpikingLayer
 
     threshold = 1.0
 
@@ -177,4 +177,4 @@ def test_slayer_vs_sinabs_compare():
     # plt.legend()
     # plt.show()
 
-    assert abs(sinabs_out.sum() - slayer_out.sum()) <= 5 * sinabs_out.sum() / 100.0
+    assert abs(sinabs_out.sum() - slayer_out.sum()) <= 10 * sinabs_out.sum() / 100.0

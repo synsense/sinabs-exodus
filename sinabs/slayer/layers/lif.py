@@ -39,6 +39,8 @@ class SpikingLayer(nn.Module):
         super().__init__()
         # Initialize neuron states
         self.threshold = threshold
+        self.tau_mem = tau_mem
+        self.tau_syn = tau_syn
         epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0)
         ref_kernel = (exp_kernel(tau_mem, dt=1.0) * threshold)
         self.tau_learning = tau_learning 

@@ -1,5 +1,5 @@
 def test_exp_kernel():
-    from sinabs2.slayer.kernels import exp_kernel
+    from sinabs.slayer.kernels import exp_kernel
 
     kernel = exp_kernel(10, 1.0)
 
@@ -11,7 +11,7 @@ def test_exp_kernel():
 
 
 def test_psp_kernel():
-    from sinabs2.slayer.kernels import psp_kernel
+    from sinabs.slayer.kernels import psp_kernel
 
     kernel = psp_kernel(tau_mem=30, tau_syn=10, dt=1.0)
 
@@ -22,8 +22,8 @@ def test_psp_kernel():
 
 def test_generateEpsp():
     import torch
-    from sinabs2.slayer.psp import generateEpsp
-    from sinabs2.slayer.kernels import psp_kernels
+    from sinabs.slayer.psp import generateEpsp
+    from sinabs.slayer.kernels import psp_kernels
 
     device = "cuda:0"
 
