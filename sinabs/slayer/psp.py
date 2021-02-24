@@ -5,7 +5,8 @@ import sinabsslayerCuda
 def generateEpsp(input_spikes, epsp_kernel):
     out = []
     if len(epsp_kernel.shape) == 1:
-        out.append(pspFunction.apply(input_spikes, epsp_kernel, 1))
+        out.append(pspFunction(input_spikes, epsp_kernel))
+
     if len(epsp_kernel.shape) == 2:
         for i, k in enumerate(epsp_kernel):
             out.append(pspFunction(input_spikes[i], k))
@@ -24,7 +25,7 @@ class PspFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, gradOutput):
-        (filter, ) = ctx.saved_tensors
+        (filter,) = ctx.saved_tensors
         gradInput = sinabsslayerCuda.corr(gradOutput.contiguous(), filter, 1)
         if filter.requires_grad is False:
             gradFilter = None
