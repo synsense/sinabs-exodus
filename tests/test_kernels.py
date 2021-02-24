@@ -3,7 +3,6 @@ def test_exp_kernel():
 
     kernel = exp_kernel(10, 1.0)
 
-
     import matplotlib.pyplot as plt
 
     plt.plot(kernel)
@@ -19,6 +18,18 @@ def test_psp_kernel():
 
     plt.plot(kernel)
     plt.show()
+
+
+def test_heaviside_kernel():
+    from sinabs.slayer.kernels import heaviside_kernel
+
+    kernel = heaviside_kernel(size=30, scale=0.8)
+
+    import matplotlib.pyplot as plt
+
+    plt.plot(kernel)
+    plt.show()
+
 
 def test_generateEpsp():
     import torch
