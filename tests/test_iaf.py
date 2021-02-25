@@ -26,11 +26,17 @@ def build_sinabs_model(n_channels=16, n_classes=10, batch_size=1):
         def __init__(self):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = SpikingLayer(threshold, batch_size=batch_size)
+            self.spk1 = SpikingLayer(
+                threshold, threshold_low=None, batch_size=batch_size
+            )
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = SpikingLayer(threshold, batch_size=batch_size)
+            self.spk2 = SpikingLayer(
+                threshold, threshold_low=None, batch_size=batch_size
+            )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = SpikingLayer(threshold, batch_size=batch_size)
+            self.spk3 = SpikingLayer(
+                threshold, threshold_low=None, batch_size=batch_size
+            )
 
         def forward(self, data):
             out = self.lin1(data)
@@ -164,4 +170,4 @@ def test_slayer_vs_sinabs_compare():
     # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
     # plt.show()
 
-    assert abs(sinabs_out.sum() - slayer_out.sum()) <= 10 * sinabs_out.sum() / 100.0
+    assert sinabs_out == slayer_out
