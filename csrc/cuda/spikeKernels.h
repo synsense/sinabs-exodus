@@ -39,6 +39,51 @@ __global__ void getSpikesKernel(
 }
 
 template <class T>
+__global__ void getSpikesKernelLowBound(
+	T* __restrict__ d_s,
+	T* __restrict__ d_u,
+	const T* __restrict__ d_nu,
+	unsigned nNeurons,
+	unsigned nuSize,
+	unsigned Ns,
+	float theta,
+	float theta_low,
+	float Ts
+)
+{
+	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
+	const T spike = 1.0f/Ts;
+
+	if(neuronID >= nNeurons)	return;
+
+	for(unsigned i=0; i<Ns; ++i)
+	{
+		unsigned linearID = i + neuronID * Ns;
+		if(d_u[linearID] >= theta)
+		{
+            int num_spikes = d_u[linearID] / theta;
+			d_s[linearID] += spike * num_spikes;
+			// dynamic parallelism seems to be slower because of race condition!!!
+			// ahpKernel<<< block, thread >>>(d_u + linearID, d_nu, nuSize);
+			// cudaDeviceSynchronize();
+			for(unsigned j=1; j<nuSize; ++j)
+			{
+				if(i + j < Ns)	d_u[linearID + j] += d_nu[j] * num_spikes;
+			}
+		} else if(d_u[linearID] < theta_low)
+		{
+			float difference = theta_low - d_u[linearID];
+			for(unsigned j=1; j<nuSize; ++j)
+			{
+				if(i + j < Ns) d_u[linearID + j] += difference;
+			}
+		}
+		//else	++i;
+	}
+
+}
+
+template <class T>
 __global__ void evalRhoKernel(T* d_rho, const T* d_u, float theta, float tau, unsigned nNeurons, unsigned Ns, float scale)
 {
 	unsigned timeID = blockIdx.x * blockDim.x + threadIdx.x;
@@ -57,6 +102,14 @@ void getSpikes(T* d_s, T* d_u, const T* d_nu, unsigned nNeurons, unsigned nuSize
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
 	getSpikesKernel<T><<< block, thread >>>(d_s, d_u, d_nu, nNeurons, nuSize, Ns, theta, Ts);
+}
+
+template <class T>
+void getSpikesLowBound(T* d_s, T* d_u, const T* d_nu, unsigned nNeurons, unsigned nuSize, unsigned Ns, float theta, float theta_low, float Ts)
+{
+	unsigned thread = 256;
+	unsigned block  = ceil(1.0f * nNeurons / thread);
+	getSpikesKernelLowBound<T><<< block, thread >>>(d_s, d_u, d_nu, nNeurons, nuSize, Ns, theta, theta_low, Ts);
 }
 
 template <class T>

@@ -4,7 +4,7 @@ from torch import nn
 
 from sinabs.slayer.kernels import heaviside_kernel
 from sinabs.slayer.psp import generateEpsp
-from sinabs.slayer.spike import spikeFunction
+from sinabs.slayer.spike import spikeFunction, spikeFunctionLB
 
 
 class SpikingLayer(nn.Module):
@@ -33,8 +33,11 @@ class SpikingLayer(nn.Module):
         # Initialize neuron states
         self.threshold = threshold
 
+        self.threshold_low = threshold_low
         if threshold_low is not None:
-            raise NotImplementedError("Lower threshold not implemented for this layer.")
+            self.spike_function = self._spike_func_lb
+        else:
+            self.spike_function = spikeFunction
 
         epsp_kernel = heaviside_kernel(size=t_sim, scale=1.0)
 
@@ -49,6 +52,11 @@ class SpikingLayer(nn.Module):
         self.register_buffer("epsp_kernel", epsp_kernel)
         self.register_buffer("ref_kernel", ref_kernel)
         self.spikes_number = None
+
+    def _spike_func_lb(self, vmem, ref_kernel, threshold, tau_learning):
+        return spikeFunctionLB(
+            vmem, ref_kernel, threshold, self.threshold_low, tau_learning
+        )
 
     def forward(self, spike_input):
 
@@ -72,7 +80,7 @@ class SpikingLayer(nn.Module):
         vmem = generateEpsp(spike_input, self.epsp_kernel)
 
         assert vmem.ndim == 5
-        all_spikes = spikeFunction(
+        all_spikes = self.spike_function(
             vmem, -self.ref_kernel, self.threshold, self.tau_learning
         )
         # move time back to front -> (n_batches, t_sim, n_channels)

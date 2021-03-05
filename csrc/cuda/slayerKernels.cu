@@ -34,6 +34,29 @@ torch::Tensor getSpikesCuda(torch::Tensor d_u, const torch::Tensor& d_nu, const 
 	return d_s;
 }
 
+torch::Tensor getSpikesCudaLB(torch::Tensor d_u, const torch::Tensor& d_nu, const float theta, const float theta_low, const float Ts)
+{
+	CHECK_INPUT(d_u);
+	CHECK_INPUT(d_nu);
+
+	// check if tensor are in same device
+	CHECK_DEVICE(d_u, d_nu);
+
+	auto d_s = torch::zeros_like(d_u);
+
+	// TODO implement for different data types
+
+	// set the current cuda device to wherever the tensor d_u resides
+	cudaSetDevice(d_u.device().index());
+
+	unsigned nuSize = d_nu.size(-1);
+	unsigned Ns = d_u.size(-1);
+	unsigned nNeurons = d_u.size(0) * d_u.size(1) * d_u.size(2) * d_u.size(3);
+	getSpikes<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), d_nu.data_ptr<float>(), nNeurons, nuSize, Ns, theta, theta_low, Ts);
+
+	return d_s;
+}
+
 torch::Tensor convCuda(torch::Tensor input, torch::Tensor filter, float Ts)
 {
 	CHECK_INPUT(input);
@@ -132,6 +155,7 @@ torch::Tensor shiftFl1Cuda(torch::Tensor input, float shiftLUT)
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
 	m.def("getSpikes", &getSpikesCuda, "Get spikes (CUDA)");
+	m.def("getSpikesLB", &getSpikesCudaLB, "Get spikes with lower bound on neuron state(CUDA)");
 	m.def("conv"     , &convCuda     , "Convolution in time (CUDA)");
 	m.def("corr"     , &corrCuda     , "Correlation in time (CUDA)");
 	m.def("shift"    , &shiftCuda    , "Element shift in time (CUDA)");
