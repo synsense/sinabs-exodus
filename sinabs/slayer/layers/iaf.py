@@ -54,12 +54,12 @@ class SpikingLayer(nn.Module):
 
         if spike_input.ndim == 5:
             seperate_batch_time = True
-            # expected input dimension: (n_batches, t_sim, ... )
+            # expected input dimension: (n_batches, t_sim, *channel_shape )
             channel_shape = spike_input.shape[2:]
 
         else:
             seperate_batch_time = False
-            # expected input dimension: (n_batches x t_sim, ... )
+            # expected input dimension: (n_batches x t_sim, *channel_shape )
             channel_shape = spike_input.shape[1:]
             try:
                 spike_input = spike_input.reshape(-1, self.t_sim, *channel_shape)
@@ -78,21 +78,25 @@ class SpikingLayer(nn.Module):
 
         vmem = generateEpsp(spike_input, self.epsp_kernel)
 
-        assert vmem.ndim == 5
+        assert vmem.ndim == 5  # (1, 1, n_batches, n_channels, t_sim)
         all_spikes = spikeFunction(
             vmem, -self.ref_kernel, self.threshold, self.tau_learning
         )
 
         # move time back to front -> (n_batches, t_sim, n_channels)
         all_spikes = all_spikes.squeeze(0).squeeze(0).movedim(-1, 1)
+        vmem = vmem.squeeze(0).squeeze(0).movedim(-1, 1)
         if seperate_batch_time:
             # expand channel dimensions -> (n_batches, t_sim, ...)
             all_spikes = all_spikes.reshape(*all_spikes.shape[:2], *channel_shape)
+            vmem = vmem.reshape(*vmem.shape[:2], *channel_shape)
         else:
             # flatten time and batch dimensions -> (n_batches x t_sim, n_channels)
             all_spikes = all_spikes.reshape(-1, all_spikes.shape[-1])
+            vmem = vmem.reshape(-1, vmem.shape[-1])
             # expand channel dimensions -> (n_batches x t_sim, ...)
             all_spikes = all_spikes.reshape(-1, *channel_shape)
+            vmem = vmem.reshape(-1, *channel_shape)
 
         self.vmem = vmem
         self.tw = self.t_sim
