@@ -15,6 +15,11 @@ def test_iaf_inference():
     output = layer(input_data)
     assert output.shape == input_data.shape
 
+    # - 5D Input
+    input_5d = input_data.reshape(batch_size, t_sim, *n_neurons)
+    output_5d = layer(input_5d)
+    assert (output_5d.reshape(-1, *n_neurons) == output).all()
+
 
 def build_sinabs_model(n_channels=16, n_classes=10, batch_size=1):
     import torch.nn as nn
@@ -170,4 +175,4 @@ def test_slayer_vs_sinabs_compare():
     # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
     # plt.show()
 
-    assert sinabs_out == slayer_out
+    assert (sinabs_out == slayer_out).all()
