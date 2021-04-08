@@ -60,15 +60,22 @@ class SpikingLayer(nn.Module):
 
     def forward(self, spike_input):
 
-        # expected input dimension: (n_batches x t_sim, ... )
-        channel_shape = spike_input.shape[1:]
-        try:
-            spike_input = spike_input.reshape(-1, self.t_sim, *channel_shape)
-        except RuntimeError:
-            raise ValueError(
-                f"First input dimension (time) must be multiple of {self.t_sim}"
-                + f" but is {spike_input.shape[0]}."
-            )
+        if spike_input.ndim == 5:
+            seperate_batch_time = True
+            # expected input dimension: (n_batches, t_sim, ... )
+            channel_shape = spike_input.shape[2:]
+
+        else:
+            seperate_batch_time = False
+            # expected input dimension: (n_batches x t_sim, ... )
+            channel_shape = spike_input.shape[1:]
+            try:
+                spike_input = spike_input.reshape(-1, self.t_sim, *channel_shape)
+            except RuntimeError:
+                raise ValueError(
+                    f"First input dimension (time) must be multiple of {self.t_sim}"
+                    + f" but is {spike_input.shape[0]}."
+                )
 
         # Flatten out remaining dimensions -> (n_batches, t_sim, channels)
         spike_input = spike_input.reshape(*spike_input.shape[:2], -1)
@@ -83,12 +90,17 @@ class SpikingLayer(nn.Module):
         all_spikes = self.spike_function(
             vmem, -self.ref_kernel, self.threshold, self.tau_learning
         )
+
         # move time back to front -> (n_batches, t_sim, n_channels)
         all_spikes = all_spikes.squeeze(0).squeeze(0).movedim(-1, 1)
-        # flatten time and batch dimensions -> (n_batches x t_sim, n_channels)
-        all_spikes = all_spikes.reshape(-1, all_spikes.shape[-1])
-        # expand channel dimensions -> (n_batches x t_sim, ...)
-        all_spikes = all_spikes.reshape(-1, *channel_shape)
+        if seperate_batch_time:
+            # expand channel dimensions -> (n_batches, t_sim, ...)
+            all_spikes = all_spikes.reshape(*all_spikes.shape[:2], *channel_shape)
+        else:
+            # flatten time and batch dimensions -> (n_batches x t_sim, n_channels)
+            all_spikes = all_spikes.reshape(-1, all_spikes.shape[-1])
+            # expand channel dimensions -> (n_batches x t_sim, ...)
+            all_spikes = all_spikes.reshape(-1, *channel_shape)
 
         self.vmem = vmem
         self.tw = self.t_sim
