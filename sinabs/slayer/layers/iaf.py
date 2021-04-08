@@ -14,6 +14,7 @@ class SpikingLayer(nn.Module):
         threshold: float = 1.0,
         membrane_subtract: Optional[float] = None,
         tau_learning: float = 0.5,
+        scale_grads: float = 1.0,
         threshold_low=None,
     ):
         """
@@ -21,17 +22,27 @@ class SpikingLayer(nn.Module):
 
         Parameters:
         -----------
-        t_sim:
+        t_sim: int
             Number of timesteps per sample.
-        threshold:
+        threshold: float
             Spiking threshold of the neuron.
-        membrane_subtract:
+        membrane_subtract: Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
+        tau_learning: float
+            How fast do surrogate gradients decay around thresholds.
+        scale_grads: float
+            Scale surrogate gradients in backpropagation.
+        threshold_low: None
+            Currently not supported.
         """
         super().__init__()
-        # Initialize neuron states
+
+        # - Store hyperparameters
         self.threshold = threshold
+        self.scale_grads = scale_grads
+        self.tau_learning = tau_learning
+        self.t_sim = t_sim
 
         if threshold_low is not None:
             raise NotImplementedError("Lower threshold not implemented for this layer.")
@@ -41,9 +52,6 @@ class SpikingLayer(nn.Module):
         if membrane_subtract is None:
             membrane_subtract = threshold
         ref_kernel = heaviside_kernel(size=t_sim, scale=membrane_subtract)
-
-        self.tau_learning = tau_learning
-        self.t_sim = t_sim
 
         # Blank parameter place holders
         self.register_buffer("epsp_kernel", epsp_kernel)
@@ -80,7 +88,7 @@ class SpikingLayer(nn.Module):
 
         assert vmem.ndim == 5  # (1, 1, n_batches, n_channels, t_sim)
         all_spikes = spikeFunction(
-            vmem, -self.ref_kernel, self.threshold, self.tau_learning
+            vmem, -self.ref_kernel, self.threshold, self.tau_learning, self.scale_grads
         )
 
         # move time back to front -> (n_batches, t_sim, n_channels)

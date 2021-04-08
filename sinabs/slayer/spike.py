@@ -4,7 +4,9 @@ import sinabsslayerCuda
 
 class SpikeFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, membranePotential, refractoryResponse, threshold, tauRho):
+    def forward(
+        ctx, membranePotential, refractoryResponse, threshold, tauRho, scaleRho=1.0
+    ):
         threshold = threshold
 
         spikes = sinabsslayerCuda.getSpikes(
@@ -13,6 +15,7 @@ class SpikeFunction(torch.autograd.Function):
         pdfTimeConstant = tauRho * threshold
         ctx.threshold = threshold
         ctx.pdfTimeConstant = pdfTimeConstant
+        ctx.scaleRho = scaleRho
         ctx.save_for_backward(membranePotential)
 
         return spikes
@@ -25,10 +28,13 @@ class SpikeFunction(torch.autograd.Function):
         vmem_below = vmem_shifted * (membranePotential < ctx.threshold)
         vmem_above = vmem_periodic * (membranePotential >= ctx.threshold)
         vmem_new = vmem_above + vmem_below
-        spikePdf = torch.exp(-torch.abs(vmem_new - ctx.threshold / 2) / ctx.pdfTimeConstant) / ctx.threshold
+        spikePdf = (
+            torch.exp(-torch.abs(vmem_new - ctx.threshold / 2) / ctx.pdfTimeConstant)
+            / ctx.threshold
+        )
         # spikePdf = (membranePotential >= (ctx.threshold - 0.5)).float()
 
-        return gradOutput * spikePdf, None, None, None, None
+        return ctx.scaleRho * gradOutput * spikePdf, None, None, None, None
 
 
 spikeFunction = SpikeFunction().apply
