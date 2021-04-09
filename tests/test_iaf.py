@@ -71,7 +71,7 @@ def test_sinabs_model():
     assert out.shape == (batch_size * t_sim, n_classes)
 
 
-def build_slayer_model(n_channels=16, n_classes=10, t_sim=100):
+def build_slayer_model(n_channels=16, n_classes=10, t_sim=100, scale_grads=1.0):
     import torch.nn as nn
     from sinabs.slayer.layers.iaf import SpikingLayer
 
@@ -81,11 +81,17 @@ def build_slayer_model(n_channels=16, n_classes=10, t_sim=100):
         def __init__(self):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = SpikingLayer(t_sim=t_sim, threshold=threshold)
+            self.spk1 = SpikingLayer(
+                t_sim=t_sim, threshold=threshold, scale_grads=scale_grads
+            )
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = SpikingLayer(t_sim=t_sim, threshold=threshold)
+            self.spk2 = SpikingLayer(
+                t_sim=t_sim, threshold=threshold, scale_grads=scale_grads
+            )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = SpikingLayer(t_sim=t_sim, threshold=threshold)
+            self.spk3 = SpikingLayer(
+                t_sim=t_sim, threshold=threshold, scale_grads=scale_grads
+            )
 
         def forward(self, data):
             out = self.lin1(data)
@@ -110,10 +116,54 @@ def test_slayer_model():
     model = build_slayer_model(
         n_channels=n_channels, n_classes=n_classes, t_sim=t_sim
     ).to(device)
+
     input_data = torch.rand((t_sim * batch_size, n_channels)).to(device)
 
     out = model(input_data)
     assert out.shape == (t_sim * batch_size, n_classes)
+
+
+def test_gradient_scaling():
+    import torch
+
+    torch.manual_seed(0)
+    t_sim = 100
+    n_channels = 16
+    batch_size = 1
+    n_classes = 2
+    device = "cuda:0"
+    model = build_slayer_model(
+        n_channels=n_channels, n_classes=n_classes, t_sim=t_sim
+    ).to(device)
+    initial_weights = [p.data.clone() for p in model.parameters()]
+    input_data = torch.rand((t_sim * batch_size, n_channels)).to(device)
+
+    out = model(input_data).cpu()
+    loss = torch.nn.functional.mse_loss(out, torch.ones_like(out))
+    loss.backward()
+    grads = [p.grad for p in model.parameters()]
+    # Calculate ratio of std of first and last layer gradients
+    grad_ratio = torch.std(grads[0]) / torch.std(grads[-1])
+
+    # Generate identical model, except for gradient scaling
+    model_new = build_slayer_model(
+        n_channels=n_channels, n_classes=n_classes, t_sim=t_sim, scale_grads=0.1
+    ).to(device)
+    for p_new, p_old in zip(model_new.parameters(), initial_weights):
+        p_new.data = p_old.clone()
+
+    out_new = model_new(input_data).cpu()
+    # Make sure output is the same as for original model
+    assert (out_new == out).all()
+
+    # Compare gradient ratios
+    loss_new = torch.nn.functional.mse_loss(out_new, torch.ones_like(out))
+    loss_new.backward()
+    grads_new = [p.grad for p in model_new.parameters()]
+    grad_ratio_new = torch.std(grads_new[0]) / torch.std(grads_new[-1])
+
+    # Deepest layer gradient should be much smaller than before
+    assert grad_ratio_new < 0.5 * grad_ratio
 
 
 def test_slayer_vs_sinabs_compare():
