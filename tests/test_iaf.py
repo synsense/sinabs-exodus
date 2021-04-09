@@ -158,6 +158,10 @@ def test_gradient_scaling():
 
     # Compare gradient ratios
     loss_new = torch.nn.functional.mse_loss(out_new, torch.ones_like(out))
+
+    # Make sure loss is the same as for original model
+    assert (loss_new == loss).all()
+
     loss_new.backward()
     grads_new = [p.grad for p in model_new.parameters()]
     grad_ratio_new = torch.std(grads_new[0]) / torch.std(grads_new[-1])
