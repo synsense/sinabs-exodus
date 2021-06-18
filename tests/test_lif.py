@@ -1,3 +1,6 @@
+import pytest
+
+
 def test_lif_inference():
     import torch
     from sinabs.slayer.layers.lif import SpikingLayer
@@ -16,7 +19,6 @@ def test_lif_inference():
 
     output = layer(input_data)
     assert output.shape == (t_sim, batch_size, n_neurons)
-
 
 def build_sinabs_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size=1):
     import torch.nn as nn
@@ -53,6 +55,7 @@ def build_sinabs_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size
     return TestModel()
 
 
+@pytest.mark.skip("sinabs-cpp not stable")
 def test_sinabs_model():
     import torch
     import numpy as np
@@ -198,6 +201,7 @@ def test_gradient_scaling():
     assert grad_ratio_new < 0.5 * grad_ratio
 
 
+@pytest.mark.skip("sinabs-cpp not stable")
 def test_slayer_vs_sinabs_compare():
     import torch
     import time
