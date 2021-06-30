@@ -13,7 +13,8 @@ class SpikeFunction(torch.autograd.Function):
         ----------
         membr_pot: torch.Tensor
             The membrane potential. Expected shape: (N, T_sim), where N is
-            *anything* that can be computed in parallel, i.e. batches, neurons...
+            the product of all dimensions that can be computed in parallel,
+            i.e. batches, neurons...
             Has to be contiguous.
         refr_response: torch.Tensor
             Refractory response. Has to be 1-dimensional

@@ -2,15 +2,14 @@ from typing import Optional
 
 from sinabs.slayer.kernels import heaviside_kernel
 from sinabs.slayer.psp import generateEpsp
-from sinabs.slayer.spike import spikeFunction
 from sinabs.layers.pack_dims import squeeze_class
-from sinabs.layers import IAF
+from sinabs.slayer.layers import SpikingLayer
 
 
-__all__ = ["IAFSlayer", "IAFSlayerSqueeze"]
+__all__ = ["IAF", "IAFSqueeze"]
 
 
-class IAFSlayer(IAF):
+class IAF(SpikingLayer):
     def __init__(
         self,
         num_timesteps: int,
@@ -19,6 +18,9 @@ class IAFSlayer(IAF):
         tau_learning: float = 0.5,
         scale_grads: float = 1.0,
         threshold_low=None,
+        membrane_reset=False,
+        *args,
+        **kwargs,
     ):
         """
         Pytorch implementation of a spiking, non-leaky, IAF neuron with learning enabled.
@@ -38,29 +40,33 @@ class IAFSlayer(IAF):
             Scale surrogate gradients in backpropagation.
         threshold_low: None
             Currently not supported.
+        membrane_reset: bool
+            Currently not supported.
         """
-        super().__init__()
-
-        # - Store hyperparameters
-        self.threshold = threshold
-        self.scale_grads = scale_grads
-        self.tau_learning = tau_learning
-        self.num_timesteps = num_timesteps
 
         if threshold_low is not None:
             raise NotImplementedError("Lower threshold not implemented for this layer.")
 
-        epsp_kernel = heaviside_kernel(size=num_timesteps, scale=1.0)
+        if membrane_reset:
+            raise NotImplementedError("Membrane reset not implemented for this layer.")
 
-        if membrane_subtract is None:
-            membrane_subtract = threshold
-        ref_kernel = heaviside_kernel(size=num_timesteps, scale=membrane_subtract)
+        super().__init__(
+            num_timesteps=num_timesteps,
+            threshold=threshold,
+            threshold_low=threshold_low,
+            tau_learning=tau_learning,
+            scale_grads=scale_grads,
+            membrane_subtract=membrane_subtract,
+            membrane_reset=membrane_reset,
+        )
+
+        # - Initialize kernels
+        epsp_kernel = heaviside_kernel(size=num_timesteps, scale=1.0)
+        ref_kernel = heaviside_kernel(size=num_timesteps, scale=self.membrane_subtract)
         assert ref_kernel.ndim == 1
 
-        # Blank parameter place holders
         self.register_buffer("epsp_kernel", epsp_kernel)
         self.register_buffer("ref_kernel", ref_kernel)
-        self.spikes_number = None
 
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
@@ -79,38 +85,35 @@ class IAFSlayer(IAF):
             Output spikes. Same shape as `spike_input`.
         """
 
+        n_batches, num_timesteps, *n_neurons = spike_input.shape
+
+        # Make sure time dimension matches
+        if num_timesteps != self.num_timesteps:
+            raise ValueError(
+                f"Time (2nd) dimension of `spike_input` must be {self.num_timesteps}"
+            )
+
         # Move time to last dimension -> (n_batches, *neuron_shape, num_timesteps)
         spike_input = spike_input.movedim(1, -1)
         # Flatten out all dimensions that can be processed in parallel and ensure contiguity
-        shape_before_flat = spike_input.shape
-        spike_input = spike_input.reshape(-1, spike_input.shape[-1]).contiguous()
+        spike_input = spike_input.reshape(-1, num_timesteps).contiguous()
         # -> (n_parallel, num_timesteps)
-        assert spike_input.ndim == 2
-        assert spike_input.is_contiguous()
 
         vmem = generateEpsp(spike_input, self.epsp_kernel)
 
-        assert self.ref_kernel.ndim == 1
-        assert vmem.ndim == 2
-        assert vmem.is_contiguous()
+        output_spikes = self.spike_function(vmem)
 
-        output_spikes = spikeFunction(
-            vmem, -self.ref_kernel, self.threshold, self.tau_learning, self.scale_grads
+        return self._post_spike_processing(vmem, output_spikes, n_batches, n_neurons)
+
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict()
+        param_dict.update(
+            scale_grads=self.scale_grads,
+            tau_learning=self.tau_learning,
+            num_timesteps=self.num_timesteps,
         )
-
-        assert vmem.ndim == 2
-
-        # Restore original shape: (n_batches, num_timesteps, *neuron_shape)
-        vmem = vmem.reshape(*shape_before_flat).movedim(-1, 1)
-        output_spikes = output_spikes.reshape(*shape_before_flat).movedim(-1, 1)
-
-        self.vmem = vmem.clone()
-        self.tw = self.num_timesteps
-
-        self.spikes_number = output_spikes.sum()
-
-        return output_spikes
 
 
 # Class to accept data with batch and time dimensions combined
-IAFSlayerSqueeze = squeeze_class(IAFSlayer)
+IAFSqueeze = squeeze_class(IAF)

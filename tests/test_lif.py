@@ -3,9 +3,9 @@ import pytest
 
 def test_lif_inference():
     import torch
-    from sinabs.slayer.layers.lif import SpikingLayer
+    from sinabs.slayer.layers import LIF, LIFSqueeze
 
-    t_sim = 100
+    num_timesteps = 100
     tau_mem = 10
     tau_syn = [5.0, 15.0]
     threshold = 1.0
@@ -14,11 +14,41 @@ def test_lif_inference():
 
     device = "cuda:0"
 
-    input_data = torch.rand((t_sim, batch_size, len(tau_syn), n_neurons)).to(device)
-    layer = SpikingLayer(tau_mem, tau_syn, threshold, batch_size).to(device)
+    input_data = torch.rand((batch_size, num_timesteps, len(tau_syn), n_neurons)).to(
+        device
+    )
+    input_data_squeeze = input_data.reshape(-1, len(tau_syn), n_neurons)
+
+    layer = LIF(
+        num_timesteps=num_timesteps,
+        tau_mem=tau_mem,
+        tau_syn=tau_syn,
+        threshold=threshold,
+    ).to(device)
+    layer_squeeze = LIFSqueeze(
+        num_timesteps=num_timesteps,
+        tau_mem=tau_mem,
+        tau_syn=tau_syn,
+        threshold=threshold,
+    ).to(device)
+
+    # Make sure wrong input dimensions are detected
+    with pytest.raises(ValueError):
+        output = layer(
+            torch.rand((batch_size, num_timesteps, len(tau_syn) + 1, n_neurons))
+        )
+    with pytest.raises(ValueError):
+        output = layer(
+            torch.rand((batch_size, num_timesteps + 1, len(tau_syn), n_neurons))
+        )
 
     output = layer(input_data)
-    assert output.shape == (t_sim, batch_size, n_neurons)
+    assert output.shape == (batch_size, num_timesteps, n_neurons)
+
+    output_squeeze = layer_squeeze(input_data_squeeze)
+    assert output_squeeze.shape == (batch_size * num_timesteps, n_neurons)
+    assert (output_squeeze == output.reshape(-1, n_neurons)).all()
+
 
 def build_sinabs_model(tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size=1):
     import torch.nn as nn
@@ -60,7 +90,7 @@ def test_sinabs_model():
     import torch
     import numpy as np
 
-    t_sim = 100
+    num_timesteps = 100
     n_channels = 16
     batch_size = 1
     n_classes = 10
@@ -70,16 +100,16 @@ def test_sinabs_model():
     model = build_sinabs_model(
         tau_mem, tau_syn, n_channels=n_channels, n_classes=n_classes, batch_size=1
     ).to(device)
-    input_data = torch.rand((batch_size, t_sim, n_channels)).to(device)
+    input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
     out = model(input_data)
-    assert out.shape == (batch_size, t_sim, n_classes)
+    assert out.shape == (batch_size, num_timesteps, n_classes)
 
 
 def build_slayer_model(
-    tau_mem, tau_syn, n_channels=16, n_classes=10, batch_size=1, scale_grads=1.0
+    num_timesteps, tau_mem, tau_syn, n_channels=16, n_classes=10, scale_grads=1.0
 ):
     import torch.nn as nn
-    from sinabs.slayer.layers.lif import SpikingLayer
+    from sinabs.slayer.layers import LIF
 
     threshold = 1.0
 
@@ -88,29 +118,43 @@ def build_slayer_model(
             super().__init__()
             self.n_syn = len(tau_syn)
             self.lin1 = nn.Linear(n_channels, 16 * 2, bias=False)
-            self.spk1 = SpikingLayer(
-                tau_mem, tau_syn, threshold, scale_grads=scale_grads
+            self.spk1 = LIF(
+                num_timesteps=num_timesteps,
+                tau_mem=tau_mem,
+                tau_syn=tau_syn,
+                threshold=threshold,
+                scale_grads=scale_grads,
             )
+
             self.lin2 = nn.Linear(16, 2 * 32, bias=False)
-            self.spk2 = SpikingLayer(
-                tau_mem, tau_syn, threshold, scale_grads=scale_grads
+            self.spk2 = LIF(
+                num_timesteps=num_timesteps,
+                tau_mem=tau_mem,
+                tau_syn=tau_syn,
+                threshold=threshold,
+                scale_grads=scale_grads,
             )
+
             self.lin3 = nn.Linear(32, self.n_syn * n_classes, bias=False)
-            self.spk3 = SpikingLayer(
-                tau_mem, tau_syn, threshold, scale_grads=scale_grads
+            self.spk3 = LIF(
+                num_timesteps=num_timesteps,
+                tau_mem=tau_mem,
+                tau_syn=tau_syn,
+                threshold=threshold,
+                scale_grads=scale_grads,
             )
 
         def forward(self, data):
-            # expected input shape  (time, batch, n_channels)
-            (t_sim, n_batches, n_channels) = data.shape
+            # expected input shape  (batch, num_timesteps, n_channels)
+            (n_batches, num_timesteps, n_channels) = data.shape
             out = self.lin1(data)
-            out = out.view((t_sim, n_batches, self.n_syn, -1))
+            out = out.view((n_batches, num_timesteps, self.n_syn, -1))
             out = self.spk1(out)
             out = self.lin2(out)
-            out = out.view((t_sim, n_batches, self.n_syn, -1))
+            out = out.view((n_batches, num_timesteps, self.n_syn, -1))
             out = self.spk2(out)
             out = self.lin3(out)
-            out = out.view((t_sim, n_batches, self.n_syn, -1))
+            out = out.view((n_batches, num_timesteps, self.n_syn, -1))
             out = self.spk3(out)
             return out
 
@@ -121,7 +165,7 @@ def test_slayer_model():
     import torch
     import numpy as np
 
-    t_sim = 100
+    num_timesteps = 100
     n_channels = 16
     batch_size = 1
     n_classes = 10
@@ -133,12 +177,12 @@ def test_slayer_model():
         tau_syn=tau_syn,
         n_channels=n_channels,
         n_classes=n_classes,
-        batch_size=1,
+        num_timesteps=num_timesteps,
     ).to(device)
-    input_data = torch.rand((t_sim, batch_size, n_channels)).to(device)
+    input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
 
     out = model(input_data)
-    assert out.shape == (t_sim, batch_size, n_classes)
+    assert out.shape == (batch_size, num_timesteps, n_classes)
 
 
 def test_gradient_scaling():
@@ -146,7 +190,7 @@ def test_gradient_scaling():
     import numpy as np
 
     torch.manual_seed(0)
-    t_sim = 100
+    num_timesteps = 100
     n_channels = 16
     batch_size = 1
     n_classes = 2
@@ -158,11 +202,11 @@ def test_gradient_scaling():
         tau_syn=tau_syn,
         n_channels=n_channels,
         n_classes=n_classes,
-        batch_size=1,
+        num_timesteps=num_timesteps,
         scale_grads=1.0,
     ).to(device)
     initial_weights = [p.data.clone() for p in model.parameters()]
-    input_data = torch.rand((t_sim, batch_size, n_channels)).to(device)
+    input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
 
     out = model(input_data).cpu()
     loss = torch.nn.functional.mse_loss(out, torch.ones_like(out))
@@ -177,7 +221,7 @@ def test_gradient_scaling():
         tau_syn=tau_syn,
         n_channels=n_channels,
         n_classes=n_classes,
-        batch_size=1,
+        num_timesteps=num_timesteps,
         scale_grads=0.1,
     ).to(device)
     for p_new, p_old in zip(model_new.parameters(), initial_weights):
@@ -207,7 +251,7 @@ def test_slayer_vs_sinabs_compare():
     import time
     import numpy as np
 
-    t_sim = 500
+    num_timesteps = 500
     n_channels = 16
     batch_size = 100
     n_classes = 10
@@ -216,7 +260,9 @@ def test_slayer_vs_sinabs_compare():
     tau_mem = 50.0
     tau_syn = np.array([50.0, 50.0])
     # Define inputs
-    input_data = (torch.rand((t_sim, batch_size, n_channels)) > 0.95).float().to(device)
+    input_data = (
+        (torch.rand((batch_size, num_timesteps, n_channels)) > 0.95).float().to(device)
+    )
 
     # Define models
     slayer_model = build_slayer_model(
@@ -224,14 +270,14 @@ def test_slayer_vs_sinabs_compare():
         tau_syn,
         n_channels=n_channels,
         n_classes=n_classes,
-        batch_size=batch_size,
+        num_timesteps=num_timesteps,
     ).to(device)
     sinabs_model = build_sinabs_model(
         tau_mem,
         tau_syn,
         n_channels=n_channels,
         n_classes=n_classes,
-        batch_size=batch_size,
+        num_timesteps=num_timesteps,
     ).to(device)
 
     def scale_all_weights_by_x(model, x):
