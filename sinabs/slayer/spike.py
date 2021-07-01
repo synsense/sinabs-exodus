@@ -47,7 +47,7 @@ class SpikeFunction(torch.autograd.Function):
         ctx.save_for_backward(membr_pot)
 
         return spikes
-
+    '''
     @staticmethod
     def backward(ctx, gradOutput):
         membr_pot, = ctx.saved_tensors
@@ -63,6 +63,15 @@ class SpikeFunction(torch.autograd.Function):
         # spikePdf = (membr_pot >= (ctx.threshold - 0.5)).float()
 
         return ctx.scale_rho * gradOutput * spikePdf, None, None, None, None
+    '''
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """"""
+        membr_pot, = ctx.saved_tensors
+        spike_pdf = (membr_pot >= (ctx.threshold - ctx.window)).float()
+        return spike_pdf * grad_output * ctx.scale_rho, None, None, None, None
+
 
 
 spikeFunction = SpikeFunction().apply
