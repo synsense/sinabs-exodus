@@ -1,25 +1,27 @@
 import torch
-import numpy as np
-import torch.nn as nn
-from typing import Optional, Union, List, Tuple
+from typing import Optional, List
 from sinabs.slayer.kernels import psp_kernels, exp_kernel
-from sinabs.slayer.spike import spikeFunction
-
-# - Type alias for array-like objects
 from sinabs.slayer.psp import generateEpsp
-
-ArrayLike = Union[np.ndarray, List, Tuple]
+from sinabs.layers.pack_dims import squeeze_class
+from sinabs.slayer.layers import SpikingLayer
 
 window = 1.0
 
 
-class SpikingLayer(nn.Module):
+class LIF(SpikingLayer):
     def __init__(
-            self,
-            tau_mem: float = 10.0,
-            tau_syn: List[float] = [5.0, ],
-            threshold: float = 1.0,
-            tau_learning: float = 0.5,
+        self,
+        num_timesteps: int,
+        tau_mem: float = 10.0,
+        tau_syn: List[float] = [5.0],
+        threshold: float = 1.0,
+        membrane_subtract: Optional[float] = None,
+        tau_learning: float = 0.5,
+        scale_grads: float = 1.0,
+        threshold_low=None,
+        membrane_reset=False,
+        *args,
+        **kwargs,
     ):
         """
         Pytorch implementation of a spiking neuron with learning enabled.
@@ -27,64 +29,133 @@ class SpikingLayer(nn.Module):
 
         Parameters:
         -----------
-        tau_mem:
+        num_timesteps : int
+            Number of timesteps per sample.
+        tau_mem : float
             Membrane time constant
-        tau_syn:
+        tau_syn : float
             Synaptic time constant
-        n_syn:
-            Number of synapses per neuron
-        threshold:
+        threshold : float
             Spiking threshold of the neuron.
+        membrane_subtract : Optional[float]
+            Constant to be subtracted from membrane potential when neuron spikes.
+            If ``None`` (default): Same as ``threshold``.
+        tau_learning : float
+            How fast do surrogate gradients decay around thresholds.
+        scale_grads : float
+            Scale surrogate gradients in backpropagation.
+        threshold_low : None
+            Currently not supported.
+        membrane_reset : bool
+            Currently not supported.
         """
-        super().__init__()
-        # Initialize neuron states
-        self.threshold = threshold
+
+        if threshold_low is not None:
+            raise NotImplementedError("Lower threshold not implemented for this layer.")
+
+        if membrane_reset:
+            raise NotImplementedError("Membrane reset not implemented for this layer.")
+
+        super().__init__(
+            *args,
+            **kwargs,
+            num_timesteps=num_timesteps,
+            threshold=threshold,
+            threshold_low=threshold_low,
+            tau_learning=tau_learning,
+            scale_grads=scale_grads,
+            membrane_subtract=membrane_subtract,
+            membrane_reset=membrane_reset,
+        )
+
+        # - Store hyperparameters
         self.tau_mem = tau_mem
         self.tau_syn = tau_syn
-        epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0)
-        ref_kernel = (exp_kernel(tau_mem, dt=1.0) * threshold)
-        self.tau_learning = tau_learning 
+        self.n_syn = len(tau_syn)
 
-        # Blank parameter place holders
+        # - Initialize kernels
+        epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0)
+        ref_kernel = exp_kernel(tau_mem, dt=1.0) * threshold
+        assert ref_kernel.ndim == 1
+
         self.register_buffer("epsp_kernel", epsp_kernel)
         self.register_buffer("ref_kernel", ref_kernel)
-        self.spikes_number = None
-        self.n_syn = len(tau_syn)
 
     def synaptic_output(self, input_spikes: torch.Tensor) -> torch.Tensor:
         """
         This method needs to be overridden/defined by the child class
         Default implementation is pass through
 
-        :param input_spikes: torch.Tensor input to the layer.
-        :return:  torch.Tensor - synaptic output current
+        Parameters
+        ----------
+        input_spikes: torch.Tensor
+            Input to the layer. Shape: (batches, time, synapses, ...)
+
+        Returns
+        -------
+            torch.Tensor
+            Synaptic output current. Same shape as 'input_spikes'
         """
         return input_spikes
 
-    def forward(self, binary_input: torch.Tensor):
+    def forward(self, spike_input: "torch.Tensor") -> "torch.Tensor":
+        """
+        Generate membrane potential and resulting output spike train based on
+        spiking inputs. Membrane potential will be stored as `self.vmem`.
 
-        # expected input dimension: (t_sim, n_batches, n_syn, n_channels)
-        binary_input = binary_input.movedim(0, -1) # move t_sim to last dimension (n_batches, n_syn, n_channels, t_sim)
-        binary_input = binary_input.movedim(1, 0) # move n_syn to first dimension (n_syn, n_batches, n_channels, t_sim)
-        binary_input = binary_input.unsqueeze(1).unsqueeze(1) # unsqueeze twice at dim 1 (n_syn, 1, 1, n_batches, n_channels, t_sim) 
+        Parameters
+        ----------
+        spike_input: torch.tensor
+            Spike input raster. May take non-binary integer values.
+            Expected shape: (batches, time, synapses, *neurons)
+            Third dimension corresponds to inputs for different synaptic time
+            constants. neurons can be any tuple of integers, corresponding to
+            different neuron dimensions, such as channels, height, width, ...
 
-        # Compute the synaptic current
-        syn_out: torch.Tensor = self.synaptic_output(binary_input)
-        t_sim = syn_out.shape[-1]  # Last dimension is time
-        vsyn = generateEpsp(syn_out, self.epsp_kernel)
-        vmem = vsyn.sum(0)
+        Returns
+        -------
+        torch.tensor
+            Output spikes. Shape: (batches, time, *neurons).
+        """
 
-        assert(len(vmem.shape) == 5)
-        all_spikes = spikeFunction(vmem, -self.ref_kernel, self.threshold, self.tau_learning)
+        n_batches, num_timesteps, n_syn, *n_neurons = spike_input.shape
 
-        self.vmem = vmem
-        self.tw = t_sim
+        # Make sure time and synapse dimensions match
+        if num_timesteps != self.num_timesteps:
+            raise ValueError(
+                f"Time (2nd) dimension of `spike_input` must be {self.num_timesteps}"
+            )
+        if n_syn != self.n_syn:
+            raise ValueError(
+                f"Synapse (3nd) dimension of `spike_input` must be {self.n_syn}"
+            )
 
-        all_spikes = all_spikes.squeeze(0).squeeze(0).movedim(-1, 0) # move time back to front (t_sim, n_batches, n_channels)
+        # Apply synapse function
+        syn_out = self.synaptic_output(spike_input)
 
-        self.spikes_number = all_spikes.sum()
-        self.n_spikes_out = all_spikes
-        return all_spikes
+        # Move synapse dimension to front -> (synapses, batch, time, *neurons)
+        syn_out = syn_out.movedim(2, 0)
+        # Move time dimension to back -> (synapses, batch, *neurons, time)
+        syn_out = syn_out.movedim(2, -1)
 
-    def __deepcopy__(self, memo=None):
-        raise NotImplementedError()
+        # Combine batch and all neuron dimensions (can be computed in parallel)
+        # -> (synapses, batches x neurons, time)
+        syn_out = syn_out.reshape(n_syn, num_timesteps, -1).contiguous()
+
+        assert syn_out.ndim == 3
+        assert self.epsp_kernel.ndim == 2
+
+        # Membrane potential from individual synaptic time constants
+        vmem_syn = generateEpsp(syn_out, self.epsp_kernel)
+        # Joint membrane potential -> (time, batches x neurons)
+        vmem = vmem_syn.sum(0).contiguous()
+
+        # Generate spikes
+        output_spikes = self.spike_function(vmem)
+
+        # Post-process and return
+        return self._post_spike_processing(vmem, output_spikes, n_batches, n_neurons)
+
+
+# Class to accept data with batch and time dimensions combined
+LIFSqueeze = squeeze_class(LIF)

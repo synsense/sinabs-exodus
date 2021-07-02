@@ -1,24 +1,35 @@
 def test_iaf_inference():
     import torch
-    from sinabs.slayer.layers.iaf import SpikingLayer
+    import pytest
+    from sinabs.slayer.layers import IAFSqueeze, IAF
 
-    t_sim = 100
+    num_timesteps = 100
     threshold = 1.0
     batch_size = 32
     n_neurons = (3, 3, 5)
 
     device = "cuda:0"
 
-    input_data = torch.rand((t_sim * batch_size, *n_neurons)).to(device)
-    layer = SpikingLayer(t_sim, threshold).to(device)
+    input_data = torch.rand((batch_size, num_timesteps, *n_neurons)).to(device)
+    input_data_squeeze = input_data.reshape(-1, *n_neurons)
+    layer_squeeze = IAFSqueeze(num_timesteps, threshold).to(device)
+    layer = IAF(num_timesteps, threshold).to(device)
+
+    # Make sure wrong input dimensions are detected
+    with pytest.raises(ValueError):
+        output = layer(torch.rand((batch_size, num_timesteps + 1, *n_neurons)))
 
     output = layer(input_data)
     assert output.shape == input_data.shape
 
+    output_squeeze = layer_squeeze(input_data_squeeze)
+    assert output_squeeze.shape == input_data_squeeze.shape
+    assert (output_squeeze == output.reshape(-1, *n_neurons)).all()
+
 
 def build_sinabs_model(n_channels=16, n_classes=10, batch_size=1):
     import torch.nn as nn
-    from sinabs.layers.iaf_bptt import SpikingLayer
+    from sinabs.layers import IAFSqueeze
 
     threshold = 1.0
 
@@ -26,16 +37,16 @@ def build_sinabs_model(n_channels=16, n_classes=10, batch_size=1):
         def __init__(self):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = SpikingLayer(
-                threshold, threshold_low=None, batch_size=batch_size
+            self.spk1 = IAFSqueeze(
+                threshold=threshold, threshold_low=None, batch_size=batch_size
             )
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = SpikingLayer(
-                threshold, threshold_low=None, batch_size=batch_size
+            self.spk2 = IAFSqueeze(
+                threshold=threshold, threshold_low=None, batch_size=batch_size
             )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = SpikingLayer(
-                threshold, threshold_low=None, batch_size=batch_size
+            self.spk3 = IAFSqueeze(
+                threshold=threshold, threshold_low=None, batch_size=batch_size
             )
 
         def forward(self, data):
@@ -53,7 +64,7 @@ def build_sinabs_model(n_channels=16, n_classes=10, batch_size=1):
 def test_sinabs_model():
     import torch
 
-    t_sim = 100
+    num_timesteps = 100
     n_channels = 16
     batch_size = 2
     n_classes = 10
@@ -61,14 +72,14 @@ def test_sinabs_model():
     model = build_sinabs_model(
         n_channels=n_channels, n_classes=n_classes, batch_size=1
     ).to(device)
-    input_data = torch.rand((batch_size * t_sim, n_channels)).to(device)
+    input_data = torch.rand((batch_size * num_timesteps, n_channels)).to(device)
     out = model(input_data)
-    assert out.shape == (batch_size * t_sim, n_classes)
+    assert out.shape == (batch_size * num_timesteps, n_classes)
 
 
-def build_slayer_model(n_channels=16, n_classes=10, t_sim=100):
+def build_slayer_model(n_channels=16, n_classes=10, num_timesteps=100, scale_grads=1.0):
     import torch.nn as nn
-    from sinabs.slayer.layers.iaf import SpikingLayer
+    from sinabs.slayer.layers import IAFSqueeze
 
     threshold = 1.0
 
@@ -76,11 +87,23 @@ def build_slayer_model(n_channels=16, n_classes=10, t_sim=100):
         def __init__(self):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = SpikingLayer(t_sim=t_sim, threshold=threshold)
+            self.spk1 = IAFSqueeze(
+                num_timesteps=num_timesteps,
+                threshold=threshold,
+                scale_grads=scale_grads,
+            )
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = SpikingLayer(t_sim=t_sim, threshold=threshold)
+            self.spk2 = IAFSqueeze(
+                num_timesteps=num_timesteps,
+                threshold=threshold,
+                scale_grads=scale_grads,
+            )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = SpikingLayer(t_sim=t_sim, threshold=threshold)
+            self.spk3 = IAFSqueeze(
+                num_timesteps=num_timesteps,
+                threshold=threshold,
+                scale_grads=scale_grads,
+            )
 
         def forward(self, data):
             out = self.lin1(data)
@@ -97,25 +120,76 @@ def build_slayer_model(n_channels=16, n_classes=10, t_sim=100):
 def test_slayer_model():
     import torch
 
-    t_sim = 100
+    num_timesteps = 100
     n_channels = 16
     batch_size = 2
     n_classes = 10
     device = "cuda:0"
     model = build_slayer_model(
-        n_channels=n_channels, n_classes=n_classes, t_sim=t_sim
+        n_channels=n_channels, n_classes=n_classes, num_timesteps=num_timesteps
     ).to(device)
-    input_data = torch.rand((t_sim * batch_size, n_channels)).to(device)
+
+    input_data = torch.rand((num_timesteps * batch_size, n_channels)).to(device)
 
     out = model(input_data)
-    assert out.shape == (t_sim * batch_size, n_classes)
+    assert out.shape == (num_timesteps * batch_size, n_classes)
+
+
+def test_gradient_scaling():
+    import torch
+
+    torch.manual_seed(0)
+    num_timesteps = 100
+    n_channels = 16
+    batch_size = 1
+    n_classes = 2
+    device = "cuda:0"
+    model = build_slayer_model(
+        n_channels=n_channels, n_classes=n_classes, num_timesteps=num_timesteps
+    ).to(device)
+    initial_weights = [p.data.clone() for p in model.parameters()]
+    input_data = torch.rand((num_timesteps * batch_size, n_channels)).to(device)
+
+    out = model(input_data).cpu()
+    loss = torch.nn.functional.mse_loss(out, torch.ones_like(out))
+    loss.backward()
+    grads = [p.grad for p in model.parameters()]
+    # Calculate ratio of std of first and last layer gradients
+    grad_ratio = torch.std(grads[0]) / torch.std(grads[-1])
+
+    # Generate identical model, except for gradient scaling
+    model_new = build_slayer_model(
+        n_channels=n_channels,
+        n_classes=n_classes,
+        num_timesteps=num_timesteps,
+        scale_grads=0.1,
+    ).to(device)
+    for p_new, p_old in zip(model_new.parameters(), initial_weights):
+        p_new.data = p_old.clone()
+
+    out_new = model_new(input_data).cpu()
+    # Make sure output is the same as for original model
+    assert (out_new == out).all()
+
+    # Compare gradient ratios
+    loss_new = torch.nn.functional.mse_loss(out_new, torch.ones_like(out))
+
+    # Make sure loss is the same as for original model
+    assert (loss_new == loss).all()
+
+    loss_new.backward()
+    grads_new = [p.grad for p in model_new.parameters()]
+    grad_ratio_new = torch.std(grads_new[0]) / torch.std(grads_new[-1])
+
+    # Deepest layer gradient should be much smaller than before
+    assert grad_ratio_new < 0.5 * grad_ratio
 
 
 def test_slayer_vs_sinabs_compare():
     import torch
     import time
 
-    t_sim = 500
+    num_timesteps = 500
     n_channels = 16
     batch_size = 100
     n_classes = 10
@@ -123,12 +197,12 @@ def test_slayer_vs_sinabs_compare():
 
     # Define inputs
     input_data = (
-        (torch.rand((t_sim * batch_size, n_channels)) > 0.95).float().to(device)
+        (torch.rand((num_timesteps * batch_size, n_channels)) > 0.95).float().to(device)
     )
 
     # Define models
     slayer_model = build_slayer_model(
-        n_channels=n_channels, n_classes=n_classes, t_sim=t_sim
+        n_channels=n_channels, n_classes=n_classes, num_timesteps=num_timesteps
     ).to(device)
     sinabs_model = build_sinabs_model(
         n_channels=n_channels, n_classes=n_classes, batch_size=batch_size
@@ -170,4 +244,4 @@ def test_slayer_vs_sinabs_compare():
     # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
     # plt.show()
 
-    assert sinabs_out == slayer_out
+    assert (sinabs_out == slayer_out).all()
