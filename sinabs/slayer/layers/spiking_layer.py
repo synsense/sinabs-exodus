@@ -27,9 +27,6 @@ class SpikingLayer(SpikingLayerBase):
         *args,
         **kwargs,
     ):
-
-        super().__init__()
-
         """
         Slayer implementation of a spiking neuron with learning enabled.
         This class is the base class for any layer that need to implement leaky or
