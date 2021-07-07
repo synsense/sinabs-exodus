@@ -20,7 +20,7 @@ class SpikingLayer(SpikingLayerBase):
         num_timesteps: Optional[int] = None,
         threshold: float = 1.0,
         membrane_subtract: Optional[float] = None,
-        tau_learning: float = 0.5,
+        window: float = 1.0,
         scale_grads: float = 1.0,
         threshold_low=None,
         membrane_reset=False,
@@ -42,8 +42,9 @@ class SpikingLayer(SpikingLayerBase):
         membrane_subtract: Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
-        tau_learning: float
-            How fast do surrogate gradients decay around thresholds.
+        window: float
+            Distance between step of Heaviside surrogate gradient and threshold.
+            (Relative to size of threshold)
         scale_grads: float
             Scale surrogate gradients in backpropagation.
         threshold_low: None
@@ -69,7 +70,7 @@ class SpikingLayer(SpikingLayerBase):
 
         # - Store hyperparameters
         self.scale_grads = scale_grads
-        self.tau_learning = tau_learning
+        self.window_abs = window * threshold
         self._num_timesteps = num_timesteps
 
     def spike_function(self, vmem: "torch.tensor") -> "torch.tensor":
@@ -92,7 +93,7 @@ class SpikingLayer(SpikingLayerBase):
             vmem.contiguous(),
             -self.ref_kernel,
             self.threshold,
-            self.tau_learning,
+            self.window_abs,
             self.scale_grads,
         )
 
@@ -144,3 +145,12 @@ class SpikingLayer(SpikingLayerBase):
     @property
     def num_timesteps(self):
         return self._num_timesteps
+
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict()
+        param_dict.update(
+            scale_grads=self.scale_grads,
+            window=self.window_abs / self.threshold,
+            num_timesteps=self.num_timesteps,
+        )

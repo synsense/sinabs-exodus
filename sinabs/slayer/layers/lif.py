@@ -16,7 +16,7 @@ class LIF(SpikingLayer):
         tau_syn: List[float] = [5.0],
         threshold: float = 1.0,
         membrane_subtract: Optional[float] = None,
-        tau_learning: float = 0.5,
+        window: float = 1.0,
         scale_grads: float = 1.0,
         threshold_low=None,
         membrane_reset=False,
@@ -40,8 +40,8 @@ class LIF(SpikingLayer):
         membrane_subtract : Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
-        tau_learning : float
-            How fast do surrogate gradients decay around thresholds.
+        window: float
+            Distance between step of Heaviside surrogate gradient and threshold.
         scale_grads : float
             Scale surrogate gradients in backpropagation.
         threshold_low : None
@@ -62,7 +62,7 @@ class LIF(SpikingLayer):
             num_timesteps=num_timesteps,
             threshold=threshold,
             threshold_low=threshold_low,
-            tau_learning=tau_learning,
+            window=window,
             scale_grads=scale_grads,
             membrane_subtract=membrane_subtract,
             membrane_reset=membrane_reset,
@@ -155,6 +155,11 @@ class LIF(SpikingLayer):
 
         # Post-process and return
         return self._post_spike_processing(vmem, output_spikes, n_batches, n_neurons)
+
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict()
+        param_dict.update(tau_syn=self.tau_syn, tau_mem=self.tau_mem)
 
 
 # Class to accept data with batch and time dimensions combined

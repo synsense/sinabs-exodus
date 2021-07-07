@@ -1,28 +1,38 @@
+from typing import Optional
+
 import torch
 import sinabsslayerCuda
 
 
 class SpikeFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, membr_pot, refr_response, threshold, tau_rho, scale_rho=1.0):
+    def forward(
+        ctx,
+        membr_pot: torch.tensor,
+        refr_response: torch.tensor,
+        threshold: float,
+        window: Optional[float] = None,
+        scale_rho: float = 1.0,
+    ):
         """
         Generate spikes and apply refractory response to membrane potential.
         Will modifie membrane potential in-place.
 
         Parameters
         ----------
-        membr_pot: torch.Tensor
+        membr_pot : torch.Tensor
             The membrane potential. Expected shape: (N, T_sim), where N is
             the product of all dimensions that can be computed in parallel,
             i.e. batches, neurons...
             Has to be contiguous.
-        refr_response: torch.Tensor
+        refr_response : torch.Tensor
             Refractory response. Has to be 1-dimensional
-        threshold: float
+        threshold : float
             Firing threshold
-        tau_rho: float
-            Width of the surrogate gradient exponential.
-        scale_rho: float
+        window : Optional[float]
+            Surrogate gradient will be Heaviside(membr_pot - (threshold - window))
+            If None, will be set to `threshold`.
+        scale_rho : float
             Scales the surrogate gradients.
 
         Returns
@@ -41,38 +51,19 @@ class SpikeFunction(torch.autograd.Function):
         spikes = sinabsslayerCuda.getSpikes(membr_pot, refr_response, threshold, 1.0)
 
         # Prepare backward
-        pdf_time_const = tau_rho * threshold
         ctx.threshold = threshold
-        ctx.pdf_time_const = pdf_time_const
         ctx.scale_rho = scale_rho
+        ctx.window = window or threshold
         ctx.save_for_backward(membr_pot)
 
         return spikes
-    '''
-    @staticmethod
-    def backward(ctx, gradOutput):
-        membr_pot, = ctx.saved_tensors
-        vmem_shifted = membr_pot - ctx.threshold / 2
-        vmem_periodic = vmem_shifted % ctx.threshold
-        vmem_below = vmem_shifted * (membr_pot < ctx.threshold)
-        vmem_above = vmem_periodic * (membr_pot >= ctx.threshold)
-        vmem_new = vmem_above + vmem_below
-        spikePdf = (
-            torch.exp(-torch.abs(vmem_new - ctx.threshold / 2) / ctx.pdf_time_const)
-            / ctx.threshold
-        )
-        # spikePdf = (membr_pot >= (ctx.threshold - 0.5)).float()
-
-        return ctx.scale_rho * gradOutput * spikePdf, None, None, None, None
-    '''
 
     @staticmethod
     def backward(ctx, grad_output):
         """"""
         membr_pot, = ctx.saved_tensors
-        spike_pdf = (membr_pot >= (ctx.threshold - 0.5)).float()
+        spike_pdf = (membr_pot >= (ctx.threshold - ctx.window)).float()
         return spike_pdf * grad_output * ctx.scale_rho, None, None, None, None
-
 
 
 spikeFunction = SpikeFunction().apply
