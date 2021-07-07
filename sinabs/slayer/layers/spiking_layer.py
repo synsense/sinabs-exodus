@@ -144,3 +144,12 @@ class SpikingLayer(SpikingLayerBase):
     @property
     def num_timesteps(self):
         return self._num_timesteps
+
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict()
+        param_dict.update(
+            scale_grads=self.scale_grads,
+            tau_learning=self.tau_learning,
+            num_timesteps=self.num_timesteps,
+        )

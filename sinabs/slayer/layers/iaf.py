@@ -105,15 +105,6 @@ class IAF(SpikingLayer):
 
         return self._post_spike_processing(vmem, output_spikes, n_batches, n_neurons)
 
-    @property
-    def _param_dict(self) -> dict:
-        param_dict = super()._param_dict()
-        param_dict.update(
-            scale_grads=self.scale_grads,
-            tau_learning=self.tau_learning,
-            num_timesteps=self.num_timesteps,
-        )
-
 
 # Class to accept data with batch and time dimensions combined
 IAFSqueeze = squeeze_class(IAF)

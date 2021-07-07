@@ -156,6 +156,11 @@ class LIF(SpikingLayer):
         # Post-process and return
         return self._post_spike_processing(vmem, output_spikes, n_batches, n_neurons)
 
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict()
+        param_dict.update(tau_mem=self.tau_mem, tau_syn=self.tau_syn)
+
 
 # Class to accept data with batch and time dimensions combined
 LIFSqueeze = squeeze_class(LIF)
