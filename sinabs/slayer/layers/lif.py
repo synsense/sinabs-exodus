@@ -159,7 +159,7 @@ class LIF(SpikingLayer):
     @property
     def _param_dict(self) -> dict:
         param_dict = super()._param_dict()
-        param_dict.update(tau_syn=self.tau_syn, tau_mem=self.tau_mem)
+        param_dict.update(tau_mem=self.tau_mem, tau_syn=self.tau_syn)
 
 
 # Class to accept data with batch and time dimensions combined
