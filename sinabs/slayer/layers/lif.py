@@ -5,8 +5,6 @@ from sinabs.slayer.psp import generateEpsp
 from sinabs.layers.pack_dims import squeeze_class
 from sinabs.slayer.layers import SpikingLayer
 
-window = 1.0
-
 
 class LIF(SpikingLayer):
     def __init__(
