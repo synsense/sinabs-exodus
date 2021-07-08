@@ -88,6 +88,10 @@ class SpikingLayer(SpikingLayerBase):
             Output spikes. Same shape as `vmem`
         """
 
+        # Note: Do not make `vmem` contiguous only here because a new object will
+        # be created, so that any modifications (membrane reset etc.) would not
+        # have effect on the original `vmem`.
+
         # Generate output_spikes
         return spikeFunction(
             vmem, -self.ref_kernel, self.threshold, self.tau_learning, self.scale_grads
