@@ -33,7 +33,6 @@ __global__ void getSpikesKernel(
 				if(i + j < Ns)	d_u[linearID + j] += d_nu[j] * num_spikes;
 			}
 		}
-		//else	++i;
 	}
 
 }
@@ -78,7 +77,6 @@ __global__ void getSpikesKernelLowBound(
 				if(i + j < Ns) d_u[linearID + j] += difference;
 			}
 		}
-		//else	++i;
 	}
 
 }

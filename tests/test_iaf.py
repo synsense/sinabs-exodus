@@ -4,16 +4,25 @@ def test_iaf_inference():
     from sinabs.slayer.layers import IAFSqueeze, IAF
 
     num_timesteps = 100
-    threshold = 1.0
+    threshold = 0.2
+    threshold_low = -0.2
     batch_size = 32
     n_neurons = (3, 3, 5)
 
     device = "cuda:0"
 
-    input_data = torch.rand((batch_size, num_timesteps, *n_neurons)).to(device)
+    spikes_pos = torch.rand((batch_size, num_timesteps, *n_neurons)) > 0.95
+    spikes_neg = torch.rand((batch_size, num_timesteps, *n_neurons)) > 0.9
+    input_data = (spikes_pos.float() - spikes_neg.float()).to(device)
     input_data_squeeze = input_data.reshape(-1, *n_neurons)
-    layer_squeeze = IAFSqueeze(num_timesteps, threshold).to(device)
-    layer = IAF(num_timesteps, threshold).to(device)
+
+    layer_squeeze = IAFSqueeze(num_timesteps=num_timesteps, threshold=threshold).to(
+        device
+    )
+    layer_squeeze_thr_low = IAFSqueeze(
+        num_timesteps=num_timesteps, threshold=threshold, threshold_low=threshold_low
+    ).to(device)
+    layer = IAF(num_timesteps=num_timesteps, threshold=threshold).to(device)
 
     # Make sure wrong input dimensions are detected
     with pytest.raises(ValueError):
@@ -26,27 +35,37 @@ def test_iaf_inference():
     assert output_squeeze.shape == input_data_squeeze.shape
     assert (output_squeeze == output.reshape(-1, *n_neurons)).all()
 
+    output_thrlow = layer_squeeze_thr_low(input_data_squeeze)
+    assert (output_thrlow != output_squeeze).any()
 
-def build_sinabs_model(n_channels=16, n_classes=10, batch_size=1):
+    # # Make sure vmem is not below threshold_low for two consecutive timesteps
+    # # This test might fail even if the layer works correctly
+    # vmem = layer_squeeze_thr_low.vmem
+    # assert not (
+    #     torch.logical_and(vmem[:, 1:] < threshold_low, vmem[:, :-1] < threshold_low)
+    # ).any()
+
+
+def build_sinabs_model(
+    n_channels=16, n_classes=10, batch_size=1, threshold=1.0, threshold_low=None
+):
     import torch.nn as nn
     from sinabs.layers import IAFSqueeze
-
-    threshold = 1.0
 
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
             self.spk1 = IAFSqueeze(
-                threshold=threshold, threshold_low=None, batch_size=batch_size
+                threshold=threshold, threshold_low=threshold_low, batch_size=batch_size
             )
             self.lin2 = nn.Linear(16, 32, bias=False)
             self.spk2 = IAFSqueeze(
-                threshold=threshold, threshold_low=None, batch_size=batch_size
+                threshold=threshold, threshold_low=threshold_low, batch_size=batch_size
             )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
             self.spk3 = IAFSqueeze(
-                threshold=threshold, threshold_low=None, batch_size=batch_size
+                threshold=threshold, threshold_low=threshold_low, batch_size=batch_size
             )
 
         def forward(self, data):
@@ -77,11 +96,16 @@ def test_sinabs_model():
     assert out.shape == (batch_size * num_timesteps, n_classes)
 
 
-def build_slayer_model(n_channels=16, n_classes=10, num_timesteps=100, scale_grads=1.0):
+def build_slayer_model(
+    n_channels=16,
+    n_classes=10,
+    num_timesteps=100,
+    scale_grads=1.0,
+    threshold=1.0,
+    threshold_low=None,
+):
     import torch.nn as nn
     from sinabs.slayer.layers import IAFSqueeze
-
-    threshold = 1.0
 
     class TestModel(nn.Module):
         def __init__(self):
@@ -90,18 +114,21 @@ def build_slayer_model(n_channels=16, n_classes=10, num_timesteps=100, scale_gra
             self.spk1 = IAFSqueeze(
                 num_timesteps=num_timesteps,
                 threshold=threshold,
+                threshold_low=threshold_low,
                 scale_grads=scale_grads,
             )
             self.lin2 = nn.Linear(16, 32, bias=False)
             self.spk2 = IAFSqueeze(
                 num_timesteps=num_timesteps,
                 threshold=threshold,
+                threshold_low=threshold_low,
                 scale_grads=scale_grads,
             )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
             self.spk3 = IAFSqueeze(
                 num_timesteps=num_timesteps,
                 threshold=threshold,
+                threshold_low=threshold_low,
                 scale_grads=scale_grads,
             )
 
@@ -245,3 +272,90 @@ def test_slayer_vs_sinabs_compare():
     # plt.show()
 
     assert (sinabs_out == slayer_out).all()
+
+
+def test_slayer_vs_sinabs_compare_thr_low():
+    import torch
+    import time
+
+    num_timesteps = 500
+    n_channels = 16
+    batch_size = 100
+    n_classes = 10
+    device = "cuda:0"
+    threshold = 0.7
+    threshold_low = -0.3
+
+    # Define inputs
+    input_data = (
+        (torch.rand((num_timesteps * batch_size, n_channels)) > 0.95).float().to(device)
+    )
+
+    # Define models
+    slayer_model = build_slayer_model(
+        n_channels=n_channels,
+        n_classes=n_classes,
+        num_timesteps=num_timesteps,
+        threshold=threshold,
+        threshold_low=threshold_low,
+    ).to(device)
+    slayer_model_nothrlow = build_slayer_model(
+        n_channels=n_channels,
+        n_classes=n_classes,
+        num_timesteps=num_timesteps,
+        threshold=threshold,
+        threshold_low=None,
+    ).to(device)
+    sinabs_model = build_sinabs_model(
+        n_channels=n_channels,
+        n_classes=n_classes,
+        batch_size=batch_size,
+        threshold=threshold,
+        threshold_low=threshold_low,
+    ).to(device)
+
+    def scale_all_weights_by_x(model, x):
+        for param in model.parameters():
+            param.data = param.data * x
+
+    scale_all_weights_by_x(sinabs_model, 1.0)
+
+    # Copy parameters
+    slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
+    slayer_model.lin2.weight.data = sinabs_model.lin2.weight.data.clone()
+    slayer_model.lin3.weight.data = sinabs_model.lin3.weight.data.clone()
+
+    t_start = time.time()
+    sinabs_out = sinabs_model(input_data.view((-1, n_channels)))
+    t_stop = time.time()
+    print(f"Runtime sinabs: {t_stop - t_start}")
+
+    t_start = time.time()
+    slayer_out = slayer_model(input_data)
+    t_stop = time.time()
+    print(f"Runtime slayer: {t_stop - t_start}")
+
+    t_start = time.time()
+    slayer_out_nothrlow = slayer_model_nothrlow(input_data)
+    t_stop = time.time()
+    print(f"Runtime slayer, no lower threshold: {t_stop - t_start}")
+
+    print("Sinabs model: ", sinabs_out.sum())
+    print("Slayer model: ", slayer_out.sum())
+    print("Slayer model, no lower threshold: ", slayer_out_nothrlow.sum())
+    print(slayer_out)
+
+    ## Plot data
+    # import matplotlib.pyplot as plt
+    # plt.plot(sinabs_model.spk1.record[:, 0, 0].detach().cpu(), label="sinabs")
+    # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
+    # plt.legend()
+    # plt.show()
+    # plt.figure()
+    # plt.scatter(*np.where(sinabs_out.cpu().detach().numpy()), marker=".")
+    # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
+    # plt.show()
+
+    assert (sinabs_out == slayer_out).all()
+    # Make sure there is actually a difference from adding the lower threshold
+    assert (torch.abs(slayer_out_nothrlow - slayer_out) > 1e-3).any()

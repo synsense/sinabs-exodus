@@ -51,8 +51,8 @@ torch::Tensor getSpikesCudaLB(torch::Tensor d_u, const torch::Tensor& d_nu, cons
 
 	unsigned nuSize = d_nu.size(-1);
 	unsigned Ns = d_u.size(-1);
-	unsigned nNeurons = d_u.size(0) * d_u.size(1) * d_u.size(2) * d_u.size(3);
-	getSpikes<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), d_nu.data_ptr<float>(), nNeurons, nuSize, Ns, theta, theta_low, Ts);
+	unsigned nNeurons = d_u.size(0);
+	getSpikesLowBound<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), d_nu.data_ptr<float>(), nNeurons, nuSize, Ns, theta, theta_low, Ts);
 
 	return d_s;
 }
