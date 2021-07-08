@@ -80,6 +80,7 @@ class SpikingLayer(SpikingLayerBase):
         ----------
         vmem : torch.tensor
             Membrane potential. Expected shape: (batches x neurons, time)
+            Has to be contiguous.
 
         Returns:
         --------
@@ -89,11 +90,7 @@ class SpikingLayer(SpikingLayerBase):
 
         # Generate output_spikes
         return spikeFunction(
-            vmem.contiguous(),
-            -self.ref_kernel,
-            self.threshold,
-            self.tau_learning,
-            self.scale_grads,
+            vmem, -self.ref_kernel, self.threshold, self.tau_learning, self.scale_grads
         )
 
     def _post_spike_processing(
