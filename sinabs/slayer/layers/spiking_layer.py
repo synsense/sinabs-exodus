@@ -19,17 +19,14 @@ class SpikingLayer(SpikingLayerBase):
         self,
         num_timesteps: Optional[int] = None,
         threshold: float = 1.0,
+        threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
         tau_learning: float = 0.5,
         scale_grads: float = 1.0,
-        threshold_low: Optional[float] = None,
         membrane_reset=False,
         *args,
         **kwargs,
     ):
-
-        super().__init__()
-
         """
         Slayer implementation of a spiking neuron with learning enabled.
         This class is the base class for any layer that need to implement leaky or
@@ -42,6 +39,8 @@ class SpikingLayer(SpikingLayerBase):
             Number of timesteps per sample.
         threshold: float
             Spiking threshold of the neuron.
+        threshold_low: Optional[float]
+            Lower bound for membrane potential.
         membrane_subtract: Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
@@ -49,8 +48,6 @@ class SpikingLayer(SpikingLayerBase):
             How fast do surrogate gradients decay around thresholds.
         scale_grads: float
             Scale surrogate gradients in backpropagation.
-        threshold_low: Optional[float]
-            Lower bound for membrane potential.
         membrane_reset: bool
             Currently not supported.
         """
@@ -80,6 +77,7 @@ class SpikingLayer(SpikingLayerBase):
         ----------
         vmem : torch.tensor
             Membrane potential. Expected shape: (batches x neurons, time)
+            Has to be contiguous.
 
         Returns:
         --------
@@ -87,21 +85,26 @@ class SpikingLayer(SpikingLayerBase):
             Output spikes. Same shape as `vmem`
         """
 
+        # Note: Do not make `vmem` contiguous only here because a new object will
+        # be created, so that any modifications (membrane reset etc.) would not
+        # have effect on the original `vmem`.
+
         # Generate output_spikes
         if self.threshold_low is not None:
             return spikeFunctionLB(
-                vmem.contiguous(),
-                -self.ref_kernel,
-                self.threshold,
-                self.tau_learning,
-                self.scale_grads,
-            )
-        else:
-            return spikeFunction(
-                vmem.contiguous(),
+                vmem,
                 -self.ref_kernel,
                 self.threshold,
                 self.threshold_low,
+                self.tau_learning,
+                self.scale_grads,
+            )
+
+        else:
+            return spikeFunction(
+                vmem,
+                -self.ref_kernel,
+                self.threshold,
                 self.tau_learning,
                 self.scale_grads,
             )
@@ -154,3 +157,12 @@ class SpikingLayer(SpikingLayerBase):
     @property
     def num_timesteps(self):
         return self._num_timesteps
+
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict()
+        param_dict.update(
+            scale_grads=self.scale_grads,
+            tau_learning=self.tau_learning,
+            num_timesteps=self.num_timesteps,
+        )
