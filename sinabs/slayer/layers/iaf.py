@@ -14,10 +14,10 @@ class IAF(SpikingLayer):
         self,
         num_timesteps: int,
         threshold: float = 1.0,
+        threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
         tau_learning: float = 0.5,
         scale_grads: float = 1.0,
-        threshold_low=None,
         membrane_reset=False,
         *args,
         **kwargs,
@@ -31,6 +31,8 @@ class IAF(SpikingLayer):
             Number of timesteps per sample.
         threshold: float
             Spiking threshold of the neuron.
+        threshold_low: Optional[float]
+            Lower bound for membrane potential.
         membrane_subtract: Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
@@ -38,14 +40,9 @@ class IAF(SpikingLayer):
             How fast do surrogate gradients decay around thresholds.
         scale_grads: float
             Scale surrogate gradients in backpropagation.
-        threshold_low: None
-            Currently not supported.
         membrane_reset: bool
             Currently not supported.
         """
-
-        if threshold_low is not None:
-            raise NotImplementedError("Lower threshold not implemented for this layer.")
 
         if membrane_reset:
             raise NotImplementedError("Membrane reset not implemented for this layer.")
