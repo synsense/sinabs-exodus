@@ -54,6 +54,7 @@ class SpikeFunction(torch.autograd.Function):
         ctx.threshold = threshold
         ctx.scale_rho = scale_rho
         ctx.window = window or threshold
+        ctx.subtract = refr_response[1]
         ctx.save_for_backward(membr_pot)
 
         return spikes
@@ -61,9 +62,41 @@ class SpikeFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         """"""
-        membr_pot, = ctx.saved_tensors
-        spike_pdf = (membr_pot >= (ctx.threshold - ctx.window)).float()
-        return spike_pdf * grad_output * ctx.scale_rho, None, None, None, None
+        # membr_pot, = ctx.saved_tensors
+        # spike_pdf = (membr_pot >= (ctx.threshold - ctx.window)).float() / ctx.threshold
+
+        # print("spike - grad_out", grad_output)
+        # print("spike - membr_pot", membr_pot)
+        # print("spike - pdf", spike_pdf)
+        # print("spike - grad_in", spike_pdf * grad_output * ctx.scale_rho)
+
+        # return spike_pdf * grad_output * ctx.scale_rho, None, None, None, None
+
+        n = grad_output.shape[1]
+        chi = ctx.scale_rho / ctx.threshold
+        gamma = ctx.subtract * chi ** 2
+        alphas = torch.tensor(
+            [chi] + [gamma * (1 + ctx.subtract * chi) ** k for k in range(n - 1)],
+            device="cuda",
+        ).contiguous()
+
+        # Actually want corr(alphas, grad_output) but the kernel function expects the
+        # higher dimensional argument first, so we need a little trick here.
+        grad_input = sinabsslayerCuda.conv(
+            grad_output.flip(1).contiguous(), alphas, 1
+        ).flip(1)
+        # jacobian = torch.diag(torch.tensor(n * [chi]))
+        # for i, a in enumerate(alphas):
+        #     jacobian += torch.diag(torch.tensor((n - i - 1) * [a]), i + 1)
+        # jacobian = jacobian.cuda()
+
+        # grad_input = torch.stack([jacobian @ out_batch for out_batch in grad_output])
+        # print("spike - alphas", alphas)
+        # print("spike - grad_out", grad_output)
+        # # print("spike - transposed jacobian \n", jacobian)
+        # print("spike - grad_in", grad_input)
+
+        return grad_input, None, None, None, None
 
 
 spikeFunction = SpikeFunction().apply

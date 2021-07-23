@@ -50,12 +50,17 @@ class PspFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, gradOutput):
         (kernel,) = ctx.saved_tensors
+        # Note that cross-correlation is defined as (a * b)[T] = sum a[t+T]*b[t],
+        # whereas in literature this would often be (b * a)[T].
         gradInput = sinabsslayerCuda.corr(gradOutput.contiguous(), kernel, 1)
+
+        # print("psp - grad_out", gradOutput)
+        # print("psp - kernel", kernel)
+        # print("psp - grad_in", gradInput)
         if kernel.requires_grad is False:
             gradFilter = None
         else:
-            gradFilter = None
-            pass
+            gradFilter = kernel
 
         return gradInput, gradFilter
 

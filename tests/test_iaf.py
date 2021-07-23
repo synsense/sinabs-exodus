@@ -38,15 +38,24 @@ def build_sinabs_model(n_channels=16, n_classes=10, batch_size=1):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
             self.spk1 = IAFSqueeze(
-                threshold=threshold, threshold_low=None, batch_size=batch_size
+                threshold=threshold,
+                threshold_low=None,
+                batch_size=batch_size,
+                window=1000,
             )
             self.lin2 = nn.Linear(16, 32, bias=False)
             self.spk2 = IAFSqueeze(
-                threshold=threshold, threshold_low=None, batch_size=batch_size
+                threshold=threshold,
+                threshold_low=None,
+                batch_size=batch_size,
+                window=1000,
             )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
             self.spk3 = IAFSqueeze(
-                threshold=threshold, threshold_low=None, batch_size=batch_size
+                threshold=threshold,
+                threshold_low=None,
+                batch_size=batch_size,
+                window=1000,
             )
 
         def forward(self, data):
