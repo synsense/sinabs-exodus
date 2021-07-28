@@ -13,10 +13,10 @@ class LIF(SpikingLayer):
         tau_mem: float = 10.0,
         tau_syn: List[float] = [5.0],
         threshold: float = 1.0,
+        threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
         window: float = 1.0,
         scale_grads: float = 1.0,
-        threshold_low=None,
         membrane_reset=False,
         *args,
         **kwargs,
@@ -35,6 +35,8 @@ class LIF(SpikingLayer):
             Synaptic time constant
         threshold : float
             Spiking threshold of the neuron.
+        threshold_low: Optional[float]
+            Lower bound for membrane potential.
         membrane_subtract : Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
@@ -42,14 +44,9 @@ class LIF(SpikingLayer):
             Distance between step of Heaviside surrogate gradient and threshold.
         scale_grads : float
             Scale surrogate gradients in backpropagation.
-        threshold_low : None
-            Currently not supported.
         membrane_reset : bool
             Currently not supported.
         """
-
-        if threshold_low is not None:
-            raise NotImplementedError("Lower threshold not implemented for this layer.")
 
         if membrane_reset:
             raise NotImplementedError("Membrane reset not implemented for this layer.")

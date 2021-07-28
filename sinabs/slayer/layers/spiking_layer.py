@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
 
-from sinabs.slayer.spike import spikeFunction
+from sinabs.slayer.spike import spikeFunction, spikeFunctionLB
 from sinabs.layers import SpikingLayer as SpikingLayerBase
 
 
@@ -19,10 +19,10 @@ class SpikingLayer(SpikingLayerBase):
         self,
         num_timesteps: Optional[int] = None,
         threshold: float = 1.0,
+        threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
         window: float = 1.0,
         scale_grads: float = 1.0,
-        threshold_low=None,
         membrane_reset=False,
         *args,
         **kwargs,
@@ -39,6 +39,8 @@ class SpikingLayer(SpikingLayerBase):
             Number of timesteps per sample.
         threshold: float
             Spiking threshold of the neuron.
+        threshold_low: Optional[float]
+            Lower bound for membrane potential.
         membrane_subtract: Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
@@ -47,14 +49,9 @@ class SpikingLayer(SpikingLayerBase):
             (Relative to size of threshold)
         scale_grads: float
             Scale surrogate gradients in backpropagation.
-        threshold_low: None
-            Currently not supported.
         membrane_reset: bool
             Currently not supported.
         """
-
-        if threshold_low is not None:
-            raise NotImplementedError("Lower threshold not implemented for this layer.")
 
         if membrane_reset:
             raise NotImplementedError("Membrane reset not implemented for this layer.")
@@ -94,13 +91,24 @@ class SpikingLayer(SpikingLayerBase):
         # have effect on the original `vmem`.
 
         # Generate output_spikes
-        return spikeFunction(
-            vmem,
-            -self.ref_kernel,
-            self.threshold,
-            self.window_abs,
-            self.scale_grads,
-        )
+        if self.threshold_low is not None:
+            return spikeFunctionLB(
+                vmem,
+                -self.ref_kernel,
+                self.threshold,
+                self.threshold_low,
+                self.window_abs,
+                self.scale_grads,
+            )
+
+        else:
+            return spikeFunction(
+                vmem,
+                -self.ref_kernel,
+                self.threshold,
+                self.window_abs,
+                self.scale_grads,
+            )
 
     def _post_spike_processing(
         self,
