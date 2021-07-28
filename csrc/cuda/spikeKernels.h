@@ -39,6 +39,50 @@ __global__ void getSpikesKernel(
 }
 
 template <class T>
+__global__ void spikeGradsKernel(
+	T* __restrict__ jaco,
+	const T* __restrict__ surr,
+	const T* __restrict__ refr,
+	unsigned nNeurons, unsigned refrSize, unsigned Ns)
+{
+	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if(neuronID >= nNeurons)	return;
+
+	// First ID in current row of surr
+	unsigned linearSurrRowID = neuronID * Ns;
+	// First ID in current transoised jacobian matrix
+	unsigned linearJacoOuterID = neuronID * Ns * Ns;
+
+	// iterate over rows of transposed jacobian (i.e. 'denominator' of derivative)
+	for(unsigned i=0; i<Ns; ++i)
+	{
+		// First ID in current row of transposed jacobian matrix
+		unsigned linearJacoInnerID = i * Ns + linearJacoOuterID;
+
+		// diagonal entry (j=i) equal to i-th surrogate gradient
+		jaco[i + linearJacoInnerID] = surr[i + linearSurrRowID];
+
+		// above diagonal entries, iterate over coloumns (i.e. 'numerator' of derivative)
+		for(unsigned j=i+1; j<Ns; ++j)
+		{
+			unsigned linearSurrID = j + linearSurrRowID;
+			unsigned linearJacoID = j + linearJacoInnerID;
+
+			float inner_sum = 0;
+			for(unsigned k=i; k<j; ++k)
+			{
+				inner_sum += jaco[k + linearJacoInnerID] * refr[j - k];
+			}
+
+			jaco[linearJacoID] = surr[linearSurrID] * inner_sum;
+
+		}
+	}
+}
+
+
+template <class T>
 __global__ void evalRhoKernel(T* d_rho, const T* d_u, float theta, float tau, unsigned nNeurons, unsigned Ns, float scale)
 {
 	unsigned timeID = blockIdx.x * blockDim.x + threadIdx.x;
@@ -57,6 +101,14 @@ void getSpikes(T* d_s, T* d_u, const T* d_nu, unsigned nNeurons, unsigned nuSize
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
 	getSpikesKernel<T><<< block, thread >>>(d_s, d_u, d_nu, nNeurons, nuSize, Ns, theta, Ts);
+}
+
+template <class T>
+void spikeGrads(T* jaco, const T* surr, const T* refr, unsigned nNeurons, unsigned refrSize, unsigned Ns)
+{
+	unsigned thread = 256;
+	unsigned block  = ceil(1.0f * nNeurons / thread);
+	spikeGradsKernel<T><<< block, thread >>>(jaco, surr, refr, nNeurons, refrSize, Ns);
 }
 
 template <class T>

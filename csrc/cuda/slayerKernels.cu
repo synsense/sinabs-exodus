@@ -34,6 +34,30 @@ torch::Tensor getSpikesCuda(torch::Tensor d_u, const torch::Tensor& d_nu, const 
 	return d_s;
 }
 
+torch::Tensor spikeGradsCuda(
+	const torch::Tensor& surr, const torch::Tensor& refr)
+{
+	CHECK_INPUT(surr);
+	CHECK_INPUT(refr);
+
+	// check if tensor are in same device
+	CHECK_DEVICE(surr, refr);
+
+	// set the current cuda device to wherever the tensor d_u resides
+	cudaSetDevice(surr.device().index());
+
+	unsigned refrSize = refr.size(-1);
+	unsigned Ns = surr.size(-1);
+	unsigned nNeurons = surr.size(0);
+
+	// jacobian
+	auto jaco = torch::zeros({nNeurons, Ns, Ns}, torch::dtype(torch::kFloat32).device(surr.device()));
+
+	spikeGrads<float>(jaco.data_ptr<float>(), surr.data_ptr<float>(), refr.data_ptr<float>(), nNeurons, refrSize, Ns);
+
+	return jaco;
+}
+
 torch::Tensor convCuda(torch::Tensor input, torch::Tensor filter, float Ts)
 {
 	CHECK_INPUT(input);
@@ -131,11 +155,12 @@ torch::Tensor shiftFl1Cuda(torch::Tensor input, float shiftLUT)
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-	m.def("getSpikes", &getSpikesCuda, "Get spikes (CUDA)");
-	m.def("conv"     , &convCuda     , "Convolution in time (CUDA)");
-	m.def("corr"     , &corrCuda     , "Correlation in time (CUDA)");
-	m.def("shift"    , &shiftCuda    , "Element shift in time (CUDA)");
-	m.def("shift"    , &shift1Cuda   , "Element shift in time (CUDA)");
-	m.def("shift"    , &shiftFlCuda  , "Element shift in time (CUDA)");
-	m.def("shift"    , &shiftFl1Cuda , "Element shift in time (CUDA)");
+	m.def("getSpikes" 	 ,  &getSpikesCuda , 	"Get spikes (CUDA)");
+	m.def("spikeGrads"   ,  &spikeGradsCuda,	"Get spike gradients (CUDA)");
+	m.def("conv"     	 , 	&convCuda      , 	"Convolution in time (CUDA)");
+	m.def("corr"     	 , 	&corrCuda      , 	"Correlation in time (CUDA)");
+	m.def("shift"    	 , 	&shiftCuda     , 	"Element shift in time (CUDA)");
+	m.def("shift"    	 , 	&shift1Cuda    , 	"Element shift in time (CUDA)");
+	m.def("shift"    	 , 	&shiftFlCuda   , 	"Element shift in time (CUDA)");
+	m.def("shift"    	 , 	&shiftFl1Cuda  , 	"Element shift in time (CUDA)");
 }

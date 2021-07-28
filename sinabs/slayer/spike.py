@@ -54,7 +54,8 @@ class SpikeFunction(torch.autograd.Function):
         ctx.threshold = threshold
         ctx.scale_rho = scale_rho
         ctx.window = window or threshold
-        ctx.subtract = refr_response[1]
+        # ctx.subtract = refr_response[1]
+        ctx.refr_response = refr_response
         ctx.save_for_backward(membr_pot)
 
         return spikes
@@ -62,7 +63,6 @@ class SpikeFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         """"""
-        # membr_pot, = ctx.saved_tensors
         # spike_pdf = (membr_pot >= (ctx.threshold - ctx.window)).float() / ctx.threshold
 
         # print("spike - grad_out", grad_output)
@@ -72,28 +72,48 @@ class SpikeFunction(torch.autograd.Function):
 
         # return spike_pdf * grad_output * ctx.scale_rho, None, None, None, None
 
-        n = grad_output.shape[1]
-        chi = ctx.scale_rho / ctx.threshold
-        gamma = ctx.subtract * chi ** 2
-        alphas = torch.tensor(
-            [chi] + [gamma * (1 + ctx.subtract * chi) ** k for k in range(n - 1)],
-            device="cuda",
-        ).contiguous()
+        # n = grad_output.shape[1]
+        membr_pot, = ctx.saved_tensors
 
-        # Actually want corr(alphas, grad_output) but the kernel function expects the
-        # higher dimensional argument first, so we need a little trick here.
-        grad_input = sinabsslayerCuda.conv(
-            grad_output.flip(1).contiguous(), alphas, 1
-        ).flip(1)
+        # Derivatives within individual timesteps: d(spikes)_t / d(membr_pot)_t
+        # Heaviside surrogate gradients
+        surrogates = (membr_pot >= (ctx.threshold - ctx.window)).float() / ctx.threshold
+        # print("surrogates", surrogates)
+
+        # Calculate transposed jacobian matrix
+        jaco_t = sinabsslayerCuda.spikeGrads(
+            surrogates.clone(), ctx.refr_response.clone()
+        )
+        # print("jaco", jaco_t)
+        # jaco_t = torch.zeros(
+        #     (*grad_output.shape, grad_output.shape[1]), device="cuda"
+        # ).float()
+        grad_input = torch.stack([j @ o for j, o in zip(jaco_t, grad_output)])
+        # grad_input = torch.zeros_like(grad_output)
+
+        # #
+        # chi = ctx.scale_rho / ctx.threshold
+        # gamma = ctx.subtract * chi ** 2
+        # alphas = torch.tensor(
+        #     [chi] + [gamma * (1 + ctx.subtract * chi) ** k for k in range(n - 1)],
+        #     device="cuda",
+        # ).contiguous()
+
+        # # Actually want corr(alphas, grad_output) but the kernel function expects the
+        # # higher dimensional argument first, so we need a little trick here.
+        # grad_input = sinabsslayerCuda.conv(
+        #     grad_output.flip(1).contiguous(), alphas, 1
+        # ).flip(1)
         # jacobian = torch.diag(torch.tensor(n * [chi]))
         # for i, a in enumerate(alphas):
         #     jacobian += torch.diag(torch.tensor((n - i - 1) * [a]), i + 1)
         # jacobian = jacobian.cuda()
 
         # grad_input = torch.stack([jacobian @ out_batch for out_batch in grad_output])
-        # print("spike - alphas", alphas)
+
+        #  print("spike - alphas", alphas)
         # print("spike - grad_out", grad_output)
-        # # print("spike - transposed jacobian \n", jacobian)
+        # print("spike - transposed jacobian \n", jaco_t)
         # print("spike - grad_in", grad_input)
 
         return grad_input, None, None, None, None
