@@ -97,16 +97,13 @@ __global__ void spikeGradsKernel(
 	// First ID in current row of surr
 	unsigned linearSurrRowID = neuronID * Ns;
 	// First ID in current transposed jacobian matrix
-	unsigned linearJacoOuterID = neuronID * Ns * Ns;
+	unsigned linearJacoRowID = neuronID * Ns;
 
 	// iterate over rows of transposed jacobian (i.e. 'denominator' of derivative)
 	for(unsigned i=0; i<Ns; ++i)
 	{
-		// First ID in current row of transposed jacobian matrix
-		unsigned linearJacoInnerID = i * Ns + linearJacoOuterID;
-
 		// diagonal entry (j=i) equal to i-th surrogate gradient
-		jaco[i + linearJacoInnerID] = surr[i + linearSurrRowID];
+		jaco[i + linearJacoRowID] = surr[i + linearSurrRowID];
 
 		inGrad[i + linearSurrRowID] += surr[i + linearSurrRowID] * outGrad[i + linearSurrRowID];
 
@@ -114,12 +111,12 @@ __global__ void spikeGradsKernel(
 		for(unsigned j=i+1; j<Ns; ++j)
 		{
 			unsigned linearSurrID = j + linearSurrRowID;
-			unsigned linearJacoID = j + linearJacoInnerID;
+			unsigned linearJacoID = j + linearJacoRowID;
 
 			float inner_sum = 0;
 			for(unsigned k=i; k<j; ++k)
 			{
-				if(j-k < refrSize) inner_sum += jaco[k + linearJacoInnerID] * refr[j - k];
+				if(j-k < refrSize) inner_sum += jaco[k + linearJacoRowID] * refr[j - k];
 			}
 
 			// d(a_j) / d(V_i)

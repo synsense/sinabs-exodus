@@ -55,6 +55,7 @@ torch::Tensor getSpikesCudaLB(torch::Tensor d_u, const torch::Tensor& d_nu, cons
 	getSpikesLowBound<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), d_nu.data_ptr<float>(), nNeurons, nuSize, Ns, theta, theta_low, Ts);
 
 	return d_s;
+}
 
 torch::Tensor spikeGradsCuda(
 	const torch::Tensor& surr, const torch::Tensor& refr, const torch::Tensor& outGrad)
@@ -72,8 +73,9 @@ torch::Tensor spikeGradsCuda(
 	unsigned Ns = surr.size(-1);
 	unsigned nNeurons = surr.size(0);
 
-	// Tensor for temporarily storing derivatives as transposed jacobian
-	auto jaco = torch::zeros({nNeurons, Ns, Ns}, torch::dtype(torch::kFloat32).device(surr.device()));
+	// Tensor for temporarily storing derivatives
+	// auto jaco = torch::zeros({Ns}, torch::dtype(torch::kFloat32).device(surr.device()));
+	auto jaco = torch::zeros_like(surr);
 
 	// input gradients
 	auto inGrad = torch::zeros_like(surr);
@@ -180,8 +182,8 @@ torch::Tensor shiftFl1Cuda(torch::Tensor input, float shiftLUT)
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-<<<<<<< HEAD
 	m.def("getSpikes" 	 ,  &getSpikesCuda , 	"Get spikes (CUDA)");
+	m.def("getSpikesLB"  ,  &getSpikesCudaLB,   "Get spikes with lower bound on neuron state(CUDA)");
 	m.def("spikeGrads"   ,  &spikeGradsCuda,	"Get spike gradients (CUDA)");
 	m.def("conv"     	 , 	&convCuda      , 	"Convolution in time (CUDA)");
 	m.def("corr"     	 , 	&corrCuda      , 	"Correlation in time (CUDA)");
@@ -189,14 +191,4 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 	m.def("shift"    	 , 	&shift1Cuda    , 	"Element shift in time (CUDA)");
 	m.def("shift"    	 , 	&shiftFlCuda   , 	"Element shift in time (CUDA)");
 	m.def("shift"    	 , 	&shiftFl1Cuda  , 	"Element shift in time (CUDA)");
-=======
-	m.def("getSpikes", &getSpikesCuda, "Get spikes (CUDA)");
-	m.def("getSpikesLB", &getSpikesCudaLB, "Get spikes with lower bound on neuron state(CUDA)");
-	m.def("conv"     , &convCuda     , "Convolution in time (CUDA)");
-	m.def("corr"     , &corrCuda     , "Correlation in time (CUDA)");
-	m.def("shift"    , &shiftCuda    , "Element shift in time (CUDA)");
-	m.def("shift"    , &shift1Cuda   , "Element shift in time (CUDA)");
-	m.def("shift"    , &shiftFlCuda  , "Element shift in time (CUDA)");
-	m.def("shift"    , &shiftFl1Cuda , "Element shift in time (CUDA)");
->>>>>>> master
 }
