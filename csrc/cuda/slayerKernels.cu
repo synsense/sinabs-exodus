@@ -35,7 +35,7 @@ torch::Tensor getSpikesCuda(torch::Tensor d_u, const torch::Tensor& d_nu, const 
 }
 
 torch::Tensor spikeGradsCuda(
-	const torch::Tensor& surr, const torch::Tensor& refr)
+	const torch::Tensor& surr, const torch::Tensor& refr, const torch::Tensor& outGrad)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(refr);
@@ -53,9 +53,12 @@ torch::Tensor spikeGradsCuda(
 	// jacobian
 	auto jaco = torch::zeros({nNeurons, Ns, Ns}, torch::dtype(torch::kFloat32).device(surr.device()));
 
-	spikeGrads<float>(jaco.data_ptr<float>(), surr.data_ptr<float>(), refr.data_ptr<float>(), nNeurons, refrSize, Ns);
+	// input gradients
+	auto inGrad = torch::zeros_like(surr);
 
-	return jaco;
+	spikeGrads<float>(inGrad.data_ptr<float>(), outGrad.data_ptr<float>(), jaco.data_ptr<float>(), surr.data_ptr<float>(), refr.data_ptr<float>(), nNeurons, refrSize, Ns);
+
+	return inGrad;
 }
 
 torch::Tensor convCuda(torch::Tensor input, torch::Tensor filter, float Ts)

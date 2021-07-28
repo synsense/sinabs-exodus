@@ -40,6 +40,8 @@ __global__ void getSpikesKernel(
 
 template <class T>
 __global__ void spikeGradsKernel(
+	T* __restrict__ inGrad,
+	const T* __restrict__ outGrad,
 	T* __restrict__ jaco,
 	const T* __restrict__ surr,
 	const T* __restrict__ refr,
@@ -63,6 +65,8 @@ __global__ void spikeGradsKernel(
 		// diagonal entry (j=i) equal to i-th surrogate gradient
 		jaco[i + linearJacoInnerID] = surr[i + linearSurrRowID];
 
+		inGrad[i + linearSurrRowID] += surr[i + linearSurrRowID] * outGrad[i + linearSurrRowID];
+
 		// above diagonal entries, iterate over coloumns (i.e. 'numerator' of derivative)
 		for(unsigned j=i+1; j<Ns; ++j)
 		{
@@ -75,8 +79,13 @@ __global__ void spikeGradsKernel(
 				inner_sum += jaco[k + linearJacoInnerID] * refr[j - k];
 			}
 
+			// d(a_j) / d(V_i)
 			jaco[linearJacoID] = surr[linearSurrID] * inner_sum;
 
+			//Add to i-th component in input gradient
+			inGrad[i + linearSurrRowID] += jaco[linearJacoID] * outGrad[linearSurrID];
+
+			// printf("j: %d, i: %d, a: %f, out: %f, in:%f\n", j, i, jaco[linearJacoID], outGrad[linearSurrID], inGrad[i + linearSurrRowID]);
 		}
 	}
 }
@@ -104,11 +113,11 @@ void getSpikes(T* d_s, T* d_u, const T* d_nu, unsigned nNeurons, unsigned nuSize
 }
 
 template <class T>
-void spikeGrads(T* jaco, const T* surr, const T* refr, unsigned nNeurons, unsigned refrSize, unsigned Ns)
+void spikeGrads(T* inGrad, const T* outGrad, T* jaco, const T* surr, const T* refr, unsigned nNeurons, unsigned refrSize, unsigned Ns)
 {
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
-	spikeGradsKernel<T><<< block, thread >>>(jaco, surr, refr, nNeurons, refrSize, Ns);
+	spikeGradsKernel<T><<< block, thread >>>(inGrad, outGrad, jaco, surr, refr, nNeurons, refrSize, Ns);
 }
 
 template <class T>

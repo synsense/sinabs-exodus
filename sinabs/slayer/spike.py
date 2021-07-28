@@ -81,14 +81,19 @@ class SpikeFunction(torch.autograd.Function):
         # print("surrogates", surrogates)
 
         # Calculate transposed jacobian matrix
-        jaco_t = sinabsslayerCuda.spikeGrads(
-            surrogates.clone(), ctx.refr_response.clone()
-        )
+        # jaco_t = sinabsslayerCuda.spikeGrads(
+        #     surrogates.clone(), ctx.refr_response.clone()
+        # )
         # print("jaco", jaco_t)
         # jaco_t = torch.zeros(
         #     (*grad_output.shape, grad_output.shape[1]), device="cuda"
         # ).float()
-        grad_input = torch.stack([j @ o for j, o in zip(jaco_t, grad_output)])
+        # grad_input = torch.stack([j @ o for j, o in zip(jaco_t, grad_output)])
+        grad_input = sinabsslayerCuda.spikeGrads(
+            surrogates, ctx.refr_response, grad_output
+        )
+        # print("Grad out", grad_output)
+        # print("Grad in", grad_input)
         # grad_input = torch.zeros_like(grad_output)
 
         # #
