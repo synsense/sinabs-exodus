@@ -53,7 +53,7 @@ __global__ void spikeGradsKernel(
 
 	// First ID in current row of surr
 	unsigned linearSurrRowID = neuronID * Ns;
-	// First ID in current transoised jacobian matrix
+	// First ID in current transposed jacobian matrix
 	unsigned linearJacoOuterID = neuronID * Ns * Ns;
 
 	// iterate over rows of transposed jacobian (i.e. 'denominator' of derivative)
@@ -76,7 +76,7 @@ __global__ void spikeGradsKernel(
 			float inner_sum = 0;
 			for(unsigned k=i; k<j; ++k)
 			{
-				inner_sum += jaco[k + linearJacoInnerID] * refr[j - k];
+				if(j-k < refrSize) inner_sum += jaco[k + linearJacoInnerID] * refr[j - k];
 			}
 
 			// d(a_j) / d(V_i)
@@ -87,6 +87,57 @@ __global__ void spikeGradsKernel(
 
 			// printf("j: %d, i: %d, a: %f, out: %f, in:%f\n", j, i, jaco[linearJacoID], outGrad[linearSurrID], inGrad[i + linearSurrRowID]);
 		}
+	}
+}
+
+template <class T>
+__global__ void spikeGradsKernel1D(
+	T* __restrict__ inGrad,
+	const T* __restrict__ outGrad,
+	T* __restrict__ jaco,
+	const T* __restrict__ surr,
+	const T* __restrict__ refr,
+	unsigned nNeurons, unsigned refrSize, unsigned Ns)
+{
+	// identifier corresponding to denominator in derivative (like 'i' in spikeGradsKernel)
+	// and to current row of transposed jacobian matrix
+	unsigned tID = blockIdx.x * blockDim.x + threadIdx.x;
+	unsigned neuronID = blockIdx.y * blockDim.y + threadIdx.y;
+
+	printf("block.x: %d, thread.x: %d, block.y: %d, thread.y: %d\n", blockIdx.x, threadIdx.x, blockIdx.y, threadIdx.y);
+
+	if(neuronID >= nNeurons)	return;
+	if(tID >= Ns)	return;
+
+	// First ID in current row of surr
+	unsigned linearSurrRowID = neuronID * Ns;
+	// First ID in current row of current transposed jacobian matrix
+	unsigned linearJacoRowID = tID * Ns + neuronID * Ns * Ns;
+
+	// diagonal entry (j=i) equal to i-th surrogate gradient
+	jaco[tID + linearJacoRowID] = surr[tID + linearSurrRowID];
+
+	inGrad[tID + linearSurrRowID] += surr[tID + linearSurrRowID] * outGrad[tID + linearSurrRowID];
+
+	// above diagonal entries, iterate over coloumns (i.e. 'numerator' of derivative)
+	for(unsigned j=tID + 1; j<Ns; ++j)
+	{
+		unsigned linearSurrID = j + linearSurrRowID;
+		unsigned linearJacoID = j + linearJacoRowID;
+
+		float inner_sum = 0;
+		for(unsigned k=tID; k<j; ++k)
+		{
+			if(j-k < refrSize) inner_sum += jaco[k + linearJacoRowID] * refr[j - k];
+		}
+
+		// Calculate derivative d(a_j) / d(V_i)
+		jaco[linearJacoID] = surr[linearSurrID] * inner_sum;
+
+		//Add to tID-th component in input gradient
+		inGrad[tID + linearSurrRowID] += jaco[linearJacoID] * outGrad[linearSurrID];
+
+		printf("j: %d, tID: %d, a: %f, out: %f, in:%f\n", j, tID, jaco[linearJacoID], outGrad[linearSurrID], inGrad[tID + linearSurrRowID]);
 	}
 }
 
@@ -118,6 +169,37 @@ void spikeGrads(T* inGrad, const T* outGrad, T* jaco, const T* surr, const T* re
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
 	spikeGradsKernel<T><<< block, thread >>>(inGrad, outGrad, jaco, surr, refr, nNeurons, refrSize, Ns);
+}
+
+template <class T>
+void spikeGradsFast(T* inGrad, const T* outGrad, T* jaco, const T* surr, const T* refr, unsigned nNeurons, unsigned refrSize, unsigned Ns)
+{
+	dim3 thread(128, 8, 1);
+
+	int nGrid = ceil(1.0f * nNeurons / thread.y / 65535);
+	int neuronsPerGrid = ceil(1.0f * nNeurons / nGrid);
+
+	for(auto i=0; i<nGrid; ++i)
+	{
+		int startOffset = i * neuronsPerGrid;
+		int neuronsInGrid = (startOffset + neuronsPerGrid <= nNeurons) ? neuronsPerGrid : nNeurons - startOffset;
+
+		if(neuronsInGrid < 0)	break;
+
+		dim3 block( ceil( 1.0f * Ns    / thread.x ),
+					ceil( 1.0f * neuronsInGrid / thread.y ),
+					1 );
+
+		// these should never be trigerred
+		if(block.y >= 65535)	AT_ERROR("maximum blockDim.y exceeded.");
+		if(block.z >= 65535)	AT_ERROR("maximum blockDim.z exceeded.");
+
+		spikeGradsKernel1D<T><<< block, thread >>>( inGrad + startOffset * Ns,
+													outGrad  + startOffset * Ns,
+													jaco + startOffset * Ns * Ns,
+													surr + startOffset * Ns,
+													refr, neuronsInGrid, refrSize, Ns);
+	}
 }
 
 template <class T>
