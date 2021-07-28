@@ -99,7 +99,7 @@ class IAF(SpikingLayer):
         spike_input = spike_input.reshape(-1, num_timesteps).contiguous()
         # -> (n_parallel, num_timesteps)
 
-        vmem = generateEpsp(spike_input, self.epsp_kernel)
+        vmem = generateEpsp(spike_input, self.epsp_kernel).contiguous()
 
         output_spikes = self.spike_function(vmem)
 
