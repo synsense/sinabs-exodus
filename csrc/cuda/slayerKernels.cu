@@ -58,29 +58,28 @@ torch::Tensor getSpikesCudaLB(torch::Tensor d_u, const torch::Tensor& d_nu, cons
 }
 
 torch::Tensor spikeGradsCuda(
-	const torch::Tensor& surr, const torch::Tensor& refr, const torch::Tensor& outGrad)
+	const torch::Tensor& surr, const torch::Tensor& outGrad, float refr)
 {
 	CHECK_INPUT(surr);
-	CHECK_INPUT(refr);
+	CHECK_INPUT(outGrad);
 
 	// check if tensor are in same device
-	CHECK_DEVICE(surr, refr);
+	CHECK_DEVICE(surr, outGrad);
 
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(surr.device().index());
 
-	unsigned refrSize = refr.size(-1);
 	unsigned Ns = surr.size(-1);
 	unsigned nNeurons = surr.size(0);
 
 	// Tensor for temporarily storing derivatives
 	// auto jaco = torch::zeros({Ns}, torch::dtype(torch::kFloat32).device(surr.device()));
-	auto jaco = torch::zeros_like(surr);
+	// auto jaco = torch::zeros_like(surr);
 
 	// input gradients
-	auto inGrad = torch::zeros_like(surr);
+	auto inGrad = torch::empty_like(surr);
 
-	spikeGrads<float>(inGrad.data_ptr<float>(), outGrad.data_ptr<float>(), jaco.data_ptr<float>(), surr.data_ptr<float>(), refr.data_ptr<float>(), nNeurons, refrSize, Ns);
+	spikeGradsFast<float>(inGrad.data_ptr<float>(), outGrad.data_ptr<float>(), surr.data_ptr<float>(), refr, nNeurons, Ns);
 
 	return inGrad;
 }

@@ -54,7 +54,7 @@ class SpikeFunction(torch.autograd.Function):
         ctx.threshold = threshold
         ctx.scale_rho = scale_rho
         ctx.window = window or threshold
-        ctx.refr_response = refr_response
+        ctx.membrane_subtract = refr_response[0].item()
         ctx.save_for_backward(membr_pot)
 
         return spikes
@@ -68,7 +68,7 @@ class SpikeFunction(torch.autograd.Function):
 
         # Gradient wrt. input
         grad_input = sinabsslayerCuda.spikeGrads(
-            surrogates, ctx.refr_response, grad_output
+            surrogates, grad_output, ctx.membrane_subtract
         )
 
         return ctx.scale_rho * grad_input, None, None, None, None
@@ -127,7 +127,7 @@ class SpikeFunctionLB(torch.autograd.Function):
         ctx.threshold = threshold
         ctx.scale_rho = scale_rho
         ctx.window = window or threshold
-        ctx.refr_response = refr_response
+        ctx.membrane_subtract = refr_response[0].item()
         ctx.save_for_backward(membr_pot)
 
         return spikes
@@ -141,7 +141,7 @@ class SpikeFunctionLB(torch.autograd.Function):
 
         # Gradient wrt. input
         grad_input = sinabsslayerCuda.spikeGrads(
-            surrogates, ctx.refr_response, grad_output
+            surrogates, grad_output, ctx.membrane_subtract
         )
 
         return ctx.scale_rho * grad_input, None, None, None, None, None

@@ -134,50 +134,41 @@ template <class T>
 __global__ void spikeGradsKernel1D(
 	T* __restrict__ inGrad,
 	const T* __restrict__ outGrad,
-	T* __restrict__ jaco,
 	const T* __restrict__ surr,
-	const T* __restrict__ refr,
-	unsigned nNeurons, unsigned refrSize, unsigned Ns)
+	float refr, unsigned nNeurons, unsigned Ns)
 {
 	// identifier corresponding to denominator in derivative (like 'i' in spikeGradsKernel)
 	// and to current row of transposed jacobian matrix
 	unsigned tID = blockIdx.x * blockDim.x + threadIdx.x;
 	unsigned neuronID = blockIdx.y * blockDim.y + threadIdx.y;
 
-	printf("block.x: %d, thread.x: %d, block.y: %d, thread.y: %d\n", blockIdx.x, threadIdx.x, blockIdx.y, threadIdx.y);
+	//printf("block.x: %d, thread.x: %d, block.y: %d, thread.y: %d\n", blockIdx.x, threadIdx.x, blockIdx.y, threadIdx.y);
 
 	if(neuronID >= nNeurons)	return;
 	if(tID >= Ns)	return;
 
-	// First ID in current row of surr
+	// ID of first element in current row of 2D tensors (e.g. for current neuron)
 	unsigned linearSurrRowID = neuronID * Ns;
-	// First ID in current row of current transposed jacobian matrix
-	unsigned linearJacoRowID = tID * Ns + neuronID * Ns * Ns;
+	// ID of time point at which input-gradient is to be calculated
+	unsigned inGradID = tID + linearSurrRowID;
 
-	// diagonal entry (j=i) equal to i-th surrogate gradient
-	jaco[tID + linearJacoRowID] = surr[tID + linearSurrRowID];
-
-	inGrad[tID + linearSurrRowID] += surr[tID + linearSurrRowID] * outGrad[tID + linearSurrRowID];
+	// First summand of input gradient is surrogate gradient * output gradient
+	float newGrad = surr[tID + linearSurrRowID];
+	inGrad[inGradID] = newGrad * outGrad[inGradID];
+	// Integrate over past gradients
+	float gradSum = 0;
 
 	// above diagonal entries, iterate over coloumns (i.e. 'numerator' of derivative)
 	for(unsigned j=tID + 1; j<Ns; ++j)
 	{
+		// ID for current surrogate gradient and output gradient
 		unsigned linearSurrID = j + linearSurrRowID;
-		unsigned linearJacoID = j + linearJacoRowID;
-
-		float inner_sum = 0;
-		for(unsigned k=tID; k<j; ++k)
-		{
-			if(j-k < refrSize) inner_sum += jaco[k + linearJacoRowID] * refr[j - k];
-		}
-
-		// Calculate derivative d(a_j) / d(V_i)
-		jaco[linearJacoID] = surr[linearSurrID] * inner_sum;
-
-		//Add to tID-th component in input gradient
-		inGrad[tID + linearSurrRowID] += jaco[linearJacoID] * outGrad[linearSurrID];
-
-		printf("j: %d, tID: %d, a: %f, out: %f, in:%f\n", j, tID, jaco[linearJacoID], outGrad[linearSurrID], inGrad[tID + linearSurrRowID]);
+		// Add previous gradient to gradient sum
+		gradSum += newGrad;
+		// New gradient (da_j/dV_t) is current surrogate gradient * refractory constant * grad sum
+		newGrad = surr[linearSurrID] * refr * gradSum;
+		// Add product of output gradient and new gradient to input gradient
+		inGrad[inGradID] += newGrad * outGrad[linearSurrID];
 	}
 }
 
@@ -220,7 +211,7 @@ void spikeGrads(T* inGrad, const T* outGrad, T* jaco, const T* surr, const T* re
 }
 
 template <class T>
-void spikeGradsFast(T* inGrad, const T* outGrad, T* jaco, const T* surr, const T* refr, unsigned nNeurons, unsigned refrSize, unsigned Ns)
+void spikeGradsFast(T* inGrad, const T* outGrad, const T* surr, float refr, unsigned nNeurons, unsigned Ns)
 {
 	dim3 thread(128, 8, 1);
 
@@ -244,9 +235,8 @@ void spikeGradsFast(T* inGrad, const T* outGrad, T* jaco, const T* surr, const T
 
 		spikeGradsKernel1D<T><<< block, thread >>>( inGrad + startOffset * Ns,
 													outGrad  + startOffset * Ns,
-													jaco + startOffset * Ns * Ns,
 													surr + startOffset * Ns,
-													refr, neuronsInGrid, refrSize, Ns);
+													refr, neuronsInGrid, Ns);
 	}
 }
 
