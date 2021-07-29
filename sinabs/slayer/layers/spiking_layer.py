@@ -110,7 +110,7 @@ class SpikingLayer(SpikingLayerBase):
                 self.scale_grads,
             )
 
-    @profile
+    # @profile
     def _post_spike_processing(
         self,
         vmem: "torch.tensor",

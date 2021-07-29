@@ -65,7 +65,7 @@ class IAF(SpikingLayer):
         self.register_buffer("epsp_kernel", epsp_kernel)
         # self.register_buffer("ref_kernel", ref_kernel)
 
-    @profile
+    # @profile
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
         Generate membrane potential and resulting output spike train based on

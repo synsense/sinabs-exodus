@@ -6,7 +6,7 @@ import sinabsslayerCuda
 
 class SpikeFunction(torch.autograd.Function):
     @staticmethod
-    @profile
+    # @profile
     def forward(
         ctx,
         membr_pot: torch.tensor,
@@ -79,7 +79,7 @@ class SpikeFunction(torch.autograd.Function):
 
 class SpikeFunctionLB(torch.autograd.Function):
     @staticmethod
-    @profile
+    # @profile
     def forward(
         ctx,
         membr_pot: torch.tensor,

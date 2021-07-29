@@ -2,7 +2,7 @@ import torch
 import sinabsslayerCuda
 
 
-@profile
+# @profile
 def generateEpsp(
     input_spikes: "torch.tensor", epsp_kernel: "torch.tensor"
 ) -> "torch.tensor":
@@ -16,7 +16,7 @@ def generateEpsp(
 
 class PspFunction(torch.autograd.Function):
     @staticmethod
-    @profile
+    # @profile
     def forward(ctx, spikes: "torch.tensor", kernel: "torch.tensor") -> torch.tensor:
         """
         Generate post-synaptic potential from input spikes.
