@@ -6,10 +6,11 @@ import sinabsslayerCuda
 
 class SpikeFunction(torch.autograd.Function):
     @staticmethod
+    @profile
     def forward(
         ctx,
         membr_pot: torch.tensor,
-        refr_response: torch.tensor,
+        membrane_subtract: float,
         threshold: float,
         window: Optional[float] = None,
         scale_rho: float = 1.0,
@@ -45,16 +46,18 @@ class SpikeFunction(torch.autograd.Function):
             raise ValueError("'membr_pot' has to be contiguous.")
         if not membr_pot.ndim == 2:
             raise ValueError("'membr_pot' must be 2D, (N, Time)")
-        if not refr_response.ndim == 1:
-            raise ValueError("'refr_response' has to be 1D.")
+        # if not refr_response.ndim == 1:
+        #     raise ValueError("'refr_response' has to be 1D.")
 
-        spikes = sinabsslayerCuda.getSpikes(membr_pot, refr_response, threshold, 1.0)
+        spikes = sinabsslayerCuda.getSpikes(
+            membr_pot, membrane_subtract, threshold, 1.0
+        )
 
         # Prepare backward
         ctx.threshold = threshold
         ctx.scale_rho = scale_rho
         ctx.window = window or threshold
-        ctx.membrane_subtract = refr_response[0].item()
+        ctx.membrane_subtract = membrane_subtract
         ctx.save_for_backward(membr_pot)
 
         return spikes
@@ -76,6 +79,7 @@ class SpikeFunction(torch.autograd.Function):
 
 class SpikeFunctionLB(torch.autograd.Function):
     @staticmethod
+    @profile
     def forward(
         ctx,
         membr_pot: torch.tensor,
