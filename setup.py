@@ -27,7 +27,7 @@ setup(
             ],
             extra_compile_args={
                 'cxx': ['-g'],
-                'nvcc': ['-arch=sm_60', '-O3', '-use_fast_math']
+                'nvcc': ['-arch=sm_60', '-O3', '-use_fast_math', '-rdc=true']
             }
         )
     ],
