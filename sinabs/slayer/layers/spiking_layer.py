@@ -94,7 +94,7 @@ class SpikingLayer(SpikingLayerBase):
         if self.threshold_low is not None:
             return spikeFunctionLB(
                 vmem,
-                -self.membrane_subtract,
+                -self.ref_kernel,
                 self.threshold,
                 self.threshold_low,
                 self.window_abs,
@@ -104,13 +104,12 @@ class SpikingLayer(SpikingLayerBase):
         else:
             return spikeFunction(
                 vmem,
-                -self.membrane_subtract,
+                -self.ref_kernel,
                 self.threshold,
                 self.window_abs,
                 self.scale_grads,
             )
 
-    # @profile
     def _post_spike_processing(
         self,
         vmem: "torch.tensor",

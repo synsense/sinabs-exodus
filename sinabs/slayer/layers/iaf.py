@@ -59,13 +59,12 @@ class IAF(SpikingLayer):
 
         # - Initialize kernels
         epsp_kernel = heaviside_kernel(size=num_timesteps, scale=1.0)
-        # ref_kernel = heaviside_kernel(size=num_timesteps, scale=self.membrane_subtract)
-        # assert ref_kernel.ndim == 1
+        ref_kernel = heaviside_kernel(size=num_timesteps, scale=self.membrane_subtract)
+        assert ref_kernel.ndim == 1
 
         self.register_buffer("epsp_kernel", epsp_kernel)
-        # self.register_buffer("ref_kernel", ref_kernel)
+        self.register_buffer("ref_kernel", ref_kernel)
 
-    # @profile
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
         Generate membrane potential and resulting output spike train based on

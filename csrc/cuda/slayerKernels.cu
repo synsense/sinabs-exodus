@@ -11,13 +11,13 @@
 
 // C++ Python interface
 
-torch::Tensor getSpikesCuda(torch::Tensor d_u, const float refr, const float theta, const float Ts)
+torch::Tensor getSpikesCuda(torch::Tensor d_u, const torch::Tensor& d_nu, const float theta, const float Ts)
 {
 	CHECK_INPUT(d_u);
-	// CHECK_INPUT(d_nu);
+	CHECK_INPUT(d_nu);
 
 	// check if tensor are in same device
-	// CHECK_DEVICE(d_u, d_nu);
+	CHECK_DEVICE(d_u, d_nu);
 
 	auto d_s = torch::zeros_like(d_u);
 
@@ -26,10 +26,10 @@ torch::Tensor getSpikesCuda(torch::Tensor d_u, const float refr, const float the
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(d_u.device().index());
 
-	// unsigned nuSize = d_nu.size(-1);
+	unsigned nuSize = d_nu.size(-1);
 	unsigned Ns = d_u.size(-1);
 	unsigned nNeurons = d_u.size(0);
-	getSpikes<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), nNeurons, Ns, refr, theta, Ts);
+	getSpikes<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), d_nu.data_ptr<float>(), nNeurons, nuSize, Ns, theta, Ts);
 
 	return d_s;
 }
