@@ -7,19 +7,6 @@
 #define SPIKEKERNELS_H_INCLUDED
 
 template <class T>
-__global__ void ahpKernel(
-	T* __restrict__ d_u, unsigned nSteps, float refr
-)
-{
-	unsigned stepID = threadIdx.x;
-
-	if(stepID >= nSteps)	return;
-
-	d_u[stepID] += refr;
-}
-
-
-template <class T>
 __global__ void getSpikesKernel(
 	T* __restrict__ d_s,
 	T* __restrict__ d_u,
@@ -37,13 +24,15 @@ __global__ void getSpikesKernel(
 		{
             int num_spikes = d_u[linearID] / theta;
 			d_s[linearID] += spike * num_spikes;
+			// dynamic parallelism seems to be slower because of race condition!!!
+			// ahpKernel<<< block, thread >>>(d_u + linearID, d_nu, nuSize);
+			// cudaDeviceSynchronize();
 			float refractory = refr * num_spikes;
-			ahpKernel<<< 1, 32 >>>(d_u + linearID + 1, Ns-i-1, refr);
-			// cudaThreadSynchronize();
-			// for(unsigned j=1; j<Ns; ++j)
-			// {
-			// 	if(j+i < Ns) d_u[linearID + j] += refractory;
-			// }
+			unsigned last = Ns - i;
+			for(unsigned j=1; j<last; ++j)
+			{
+				d_u[linearID + j] += refractory;
+			}
 		}
 	}
 
@@ -203,16 +192,7 @@ void getSpikes(T* d_s, T* d_u, unsigned nNeurons, unsigned Ns, float refr, float
 {
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
-
-	struct timeval t1, t2;
-	gettimeofday(&t1, 0);
-
 	getSpikesKernel<T><<< block, thread >>>(d_s, d_u, nNeurons, Ns, refr, theta, Ts);
-
-	cudaThreadSynchronize();
-	gettimeofday(&t2, 0);
-	double time = (1000000.0*(t2.tv_sec-t1.tv_sec) + t2.tv_usec-t1.tv_usec)/1000.0;
-	printf("Time to generate: %3.1f ms \n", time);
 }
 
 template <class T>
