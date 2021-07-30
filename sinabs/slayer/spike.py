@@ -68,7 +68,7 @@ class SpikeFunction(torch.autograd.Function):
 
         # Gradient wrt. input
         grad_input = sinabsslayerCuda.spikeGrads(
-            surrogates, grad_output, ctx.membrane_subtract
+            surrogates.contiguous(), grad_output.contiguous(), ctx.membrane_subtract
         )
 
         return ctx.scale_rho * grad_input, None, None, None, None
