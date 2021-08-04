@@ -25,9 +25,6 @@ __global__ void getSpikesKernel(
 		{
             int num_spikes = d_u[linearID] / theta;
 			d_s[linearID] += spike * num_spikes;
-			// dynamic parallelism seems to be slower because of race condition!!!
-			// ahpKernel<<< block, thread >>>(d_u + linearID, d_nu, nuSize);
-			// cudaDeviceSynchronize();
 			for(unsigned j=1; j<nuSize; ++j)
 			{
 				if(i + j < Ns)	d_u[linearID + j] += d_nu[j] * num_spikes;
@@ -62,9 +59,6 @@ __global__ void getSpikesKernelLowBound(
 		{
             int num_spikes = d_u[linearID] / theta;
 			d_s[linearID] += spike * num_spikes;
-			// dynamic parallelism seems to be slower because of race condition!!!
-			// ahpKernel<<< block, thread >>>(d_u + linearID, d_nu, nuSize);
-			// cudaDeviceSynchronize();
 			for(unsigned j=1; j<nuSize; ++j)
 			{
 				if(i + j < Ns)	d_u[linearID + j] += d_nu[j] * num_spikes;
@@ -72,7 +66,7 @@ __global__ void getSpikesKernelLowBound(
 		} else if(d_u[linearID] < theta_low)
 		{
 			float difference = theta_low - d_u[linearID];
-			for(unsigned j=1; j<nuSize; ++j)
+			for(unsigned j=1; j<Ns; ++j)
 			{
 				if(i + j < Ns) d_u[linearID + j] += difference;
 			}
@@ -169,6 +163,65 @@ __global__ void spikeGradsKernel1D(
 		newGrad = surr[linearSurrID] * refr * gradSum;
 		// Add product of output gradient and new gradient to input gradient
 		inGrad[inGradID] += newGrad * outGrad[linearSurrID];
+	}
+}
+
+
+/**
+ * This kernel computes the i-th element (corresponding to the i-th time step) each
+ * of the the input gradient for one neuron and/or batch.
+ * It amounts to the scalar product of the output gradient with the derivative of
+ * the spike output wrt. the input at the i-th timestep.
+ *
+ * inputGrad_i = surr_i * outputGrad_i + \sum_{j=i}^{N_s - 1} outputGrad_j * surr_j *
+ * 				 * \prod_{k=i}^{j-1} (1 + surr_k * membrSubtract)
+ * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
+ * 					input gradients are to be written
+ * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
+ * @param surr 1D-tensor (Ns) with the given surrogate gradients ds_t/dV_t for each t
+ * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param nNeurons Number of neurons/batches
+ * @param Ns Number of timesteps
+ */
+template <class T>
+__global__ void fullGradsKernel1D(
+	T* __restrict__ inputGrad,
+	const T* __restrict__ outputGrad,
+	const T* __restrict__ surr,
+	float membrSubtract, unsigned nNeurons, unsigned Ns)
+{
+	// Identifier corresponding to the element of the input gradient that is
+	// computed as well as the denominator in the derivatives
+	unsigned i = blockIdx.x * blockDim.x + threadIdx.x;
+	if(i >= Ns)	return;
+
+	// Identifier for the current neuron and/or batch
+	unsigned neuronID = blockIdx.y * blockDim.y + threadIdx.y;
+	if(neuronID >= nNeurons)	return;
+
+	// Index of first element in current row of 2D tensors (e.g. for current neuron)
+	unsigned linearSurrRowID = neuronID * Ns;
+	// Index at which input-gradient is to be calculated
+	unsigned inputGradID = i + linearSurrRowID;
+
+	// First summand of input gradient is surrogate gradient * output gradient
+	inputGrad[inputGradID] = surr[inputGradID] * outputGrad[inputGradID];
+
+	// Accumulate product of past (1 + surr * membrSubtract) terms
+	float accGrad = 1.0f;
+	float newFactor;
+	unsigned linearSurrID;
+
+	// Iterate through sum. Stop early when accumulated product is 0
+	for(unsigned j=i + 1; (j<Ns and accGrad != 0.0f); ++j)
+	{
+		// ID for current surrogate gradient and output gradient
+		linearSurrID = j + linearSurrRowID;
+		// New factor to be accumulated
+		newFactor = 1.0f - membrSubtract * surr[linearSurrID - 1];
+		accGrad *= newFactor;
+		// Add new term to current gradient
+		inputGrad[inputGradID] += accGrad * surr[linearSurrID] * outputGrad[linearSurrID];
 	}
 }
 

@@ -301,7 +301,7 @@ def test_slayer_vs_sinabs_compare():
         assert (sinabs_out == slayer_out).all()
 
         # Compare gradients
-        assert all((g0 == g1).all() for g0, g1 in zip(grads_sinabs, grads_slayer))
+        assert all(torch.allclose(g0, g1) for g0, g1 in zip(grads_sinabs, grads_slayer))
 
 
 def test_slayer_vs_sinabs_compare_thr_low():

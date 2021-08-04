@@ -96,11 +96,13 @@ class IAF(SpikingLayer):
         spike_input = spike_input.reshape(-1, num_timesteps).contiguous()
         # -> (n_parallel, num_timesteps)
 
-        vmem = generateEpsp(spike_input, self.epsp_kernel).contiguous()
+        # vmem = generateEpsp(spike_input, self.epsp_kernel).contiguous()
 
-        output_spikes = self.spike_function(vmem)
+        output_spikes = self.spike_function(spike_input.contiguous())
 
-        return self._post_spike_processing(vmem, output_spikes, n_batches, n_neurons)
+        return self._post_spike_processing(
+            spike_input.contiguous(), output_spikes, n_batches, n_neurons
+        )
 
 
 # Class to accept data with batch and time dimensions combined
