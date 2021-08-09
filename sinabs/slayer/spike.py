@@ -16,7 +16,8 @@ class SpikeFunction(torch.autograd.Function):
     ):
         """
         Generate spikes and apply refractory response to membrane potential.
-        Will modifie membrane potential in-place.
+        Will modifie membrane potential in-place. For non-leaky IAF neuron models,
+        SpikeFunctionIterForward is the faster option.
 
         Parameters
         ----------
@@ -86,8 +87,10 @@ class SpikeFunctionLB(torch.autograd.Function):
         scale_rho=1.0,
     ):
         """
-        Generate spikes and apply refractory response to membrane potential.
-        Will modifie membrane potential in-place.
+        Generate spikes and apply refractory response to membrane potential, considering
+        a non-optional lower limit for the membrane potential. Will modifie membrane
+        potential in-place. For non-leaky IAF neuron models, SpikeFunctionIterForward is
+        the faster option.
 
         Parameters
         ----------
@@ -147,9 +150,8 @@ class SpikeFunctionLB(torch.autograd.Function):
         return ctx.scale_rho * grad_input, None, None, None, None, None
 
 
-class SpikeFunctionOldForward(torch.autograd.Function):
+class SpikeFunctionIterForward(torch.autograd.Function):
     @staticmethod
-    # @profile
     def forward(
         ctx,
         inp: torch.tensor,
@@ -184,7 +186,9 @@ class SpikeFunctionOldForward(torch.autograd.Function):
 
         Returns
         -------
-        torch.tensor
+        torch.tensor (T x T_sim)
+            Membrane potential for each neuron and time step
+        torch.tensor (N x T_sim)
             Integer spike raster. Same shape as ``membr_pot``
         """
 
@@ -205,7 +209,7 @@ class SpikeFunctionOldForward(torch.autograd.Function):
             # subtract a number of membrane_subtract's as there are spikes
             state = inp[:, t] + state - activations * membrane_subtract
             if threshold_low is not None:
-                # This is equivalent to functional.threshold. non zero threshold is not supported for onnx
+                # ReLU for efficient implementation of lower limit
                 state = torch.nn.functional.relu(state - threshold_low) + threshold_low
             states[:, t] = state
 
@@ -216,34 +220,38 @@ class SpikeFunctionOldForward(torch.autograd.Function):
             spikes[:, t] = activations
 
         ctx.threshold = threshold
+        ctx.threshold_low = threshold_low
         ctx.scale_rho = scale_rho
         ctx.window = window or threshold
         ctx.membrane_subtract = membrane_subtract
         ctx.save_for_backward(states)
 
-        return spikes
+        return spikes, states
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output, grad_state):
         states, = ctx.saved_tensors
 
         # Heaviside surrogate gradients
         surrogates = (states >= (ctx.threshold - ctx.window)).float() / ctx.threshold
 
-        # grad_input = torch.empty_like(grad_output)
-
-        # for surr,
+        # Gradient becomes 0 where states is clipped to lower threshold
+        if ctx.threshold_low is None:
+            not_clipped = torch.ones_like(surrogates)
+        else:
+            not_clipped = (states > ctx.threshold_low).float()
 
         # Gradient wrt. intermediate states
-        grad_v = sinabsslayerCuda.spikeGrads(
-            surrogates.contiguous(), grad_output.contiguous(), ctx.membrane_subtract
+        grad_input = sinabsslayerCuda.spikeGradsFull(
+            surrogates.contiguous(),
+            grad_output.contiguous(),
+            not_clipped.contiguous(),
+            ctx.membrane_subtract,
         )
-        ones = torch.ones(states.shape[1], dtype=torch.float32, device="cuda")
-        grad_input = sinabsslayerCuda.corr(grad_v, ones, 1)
 
         return ctx.scale_rho * grad_input, None, None, None, None, None, None, None
 
 
 spikeFunction = SpikeFunction().apply
 spikeFunctionLB = SpikeFunctionLB().apply
-spikeFunctionOldForward = SpikeFunctionOldForward().apply
+spikeFunctionIterForward = SpikeFunctionIterForward().apply

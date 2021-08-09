@@ -2,7 +2,7 @@ from typing import Optional, Tuple
 
 import torch
 
-from sinabs.slayer.spike import spikeFunction, spikeFunctionLB, spikeFunctionOldForward
+from sinabs.slayer.spike import spikeFunction, spikeFunctionLB
 from sinabs.layers import SpikingLayer as SpikingLayerBase
 
 
@@ -93,20 +93,10 @@ class SpikingLayer(SpikingLayerBase):
         # have effect on the original `vmem`.
 
         # Generate output_spikes
-        if True:  # self.threshold_low is not None:
-            # return spikeFunctionLB(
-            #     vmem,
-            #     -self.ref_kernel,
-            #     self.threshold,
-            #     self.threshold_low,
-            #     self.window_abs,
-            #     self.scale_grads,
-            # )
-            return spikeFunctionOldForward(
+        if self.threshold_low is not None:
+            return spikeFunctionLB(
                 vmem,
-                self.membrane_subtract,
-                torch.zeros_like(vmem[:, 0]),
-                torch.zeros_like(vmem[:, 0]),
+                -self.ref_kernel,
                 self.threshold,
                 self.threshold_low,
                 self.window_abs,

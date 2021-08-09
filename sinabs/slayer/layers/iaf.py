@@ -1,7 +1,9 @@
 from typing import Optional
+from math import prod
 
 from sinabs.slayer.kernels import heaviside_kernel
 from sinabs.slayer.psp import generateEpsp
+from sinabs.slayer.spike import spikeFunctionIterForward
 from sinabs.layers.pack_dims import squeeze_class
 from sinabs.slayer.layers import SpikingLayer
 
@@ -65,6 +67,34 @@ class IAF(SpikingLayer):
         self.register_buffer("epsp_kernel", epsp_kernel)
         self.register_buffer("ref_kernel", ref_kernel)
 
+    def spike_function(self, spike_input):
+        """
+        Generate membrane potential and output spikes from membrane potential.
+
+        Parameters
+        ----------
+        spike_input : torch.tensor
+            Input spikes. Expected shape: (batches x neurons, time)
+            Has to be contiguous.
+
+        Returns:
+        --------
+        torch.tensor
+            Membrane potential. Same shape as `spike_input`
+        torch.tensor
+            Output spikes. Same shape as `spike_input`
+        """
+        return spikeFunctionIterForward(
+            spike_input,
+            self.membrane_subtract,
+            self.state,
+            self.activations,
+            self.threshold,
+            self.threshold_low,
+            self.window_abs,
+            self.scale_grads,
+        )
+
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
         Generate membrane potential and resulting output spike train based on
@@ -84,6 +114,10 @@ class IAF(SpikingLayer):
 
         n_batches, num_timesteps, *n_neurons = spike_input.shape
 
+        n_parallel = n_batches * prod(n_neurons)
+        if not hasattr(self, "state") or self.state.shape != (n_parallel,):
+            self.reset_states(shape=(n_parallel,))
+
         # Make sure time dimension matches
         if num_timesteps != self.num_timesteps:
             raise ValueError(
@@ -98,7 +132,10 @@ class IAF(SpikingLayer):
 
         # vmem = generateEpsp(spike_input, self.epsp_kernel).contiguous()
 
-        output_spikes = self.spike_function(spike_input.contiguous())
+        output_spikes, states = self.spike_function(spike_input.contiguous())
+
+        self.state = states[:, -1].reshape(n_batches, *n_neurons).clone()
+        self.activations = output_spikes[:, -1].reshape(n_batches, *n_neurons).clone()
 
         return self._post_spike_processing(
             spike_input.contiguous(), output_spikes, n_batches, n_neurons

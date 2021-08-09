@@ -72,14 +72,33 @@ torch::Tensor spikeGradsCuda(
 	unsigned Ns = surr.size(-1);
 	unsigned nNeurons = surr.size(0);
 
-	// Tensor for temporarily storing derivatives
-	// auto jaco = torch::zeros({Ns}, torch::dtype(torch::kFloat32).device(surr.device()));
-	// auto jaco = torch::zeros_like(surr);
+	// input gradients
+	auto inGrad = torch::empty_like(surr);
+
+	spikeGrads<float>(inGrad.data_ptr<float>(), outGrad.data_ptr<float>(), surr.data_ptr<float>(), refr, nNeurons, Ns);
+
+	return inGrad;
+}
+
+torch::Tensor spikeGradsFullCuda(
+	const torch::Tensor& surr, const torch::Tensor& outGrad, const torch::Tensor& notClipped, float refr)
+{
+	CHECK_INPUT(surr);
+	CHECK_INPUT(outGrad);
+
+	// check if tensor are in same device
+	CHECK_DEVICE(surr, outGrad);
+
+	// set the current cuda device to wherever the tensor d_u resides
+	cudaSetDevice(surr.device().index());
+
+	unsigned Ns = surr.size(-1);
+	unsigned nNeurons = surr.size(0);
 
 	// input gradients
 	auto inGrad = torch::empty_like(surr);
 
-	spikeGradsFast<float>(inGrad.data_ptr<float>(), outGrad.data_ptr<float>(), surr.data_ptr<float>(), refr, nNeurons, Ns);
+	spikeGradsFull<float>(inGrad.data_ptr<float>(), outGrad.data_ptr<float>(), surr.data_ptr<float>(), notClipped.data_ptr<float>(), refr, nNeurons, Ns);
 
 	return inGrad;
 }
@@ -181,13 +200,14 @@ torch::Tensor shiftFl1Cuda(torch::Tensor input, float shiftLUT)
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-	m.def("getSpikes" 	 ,  &getSpikesCuda , 	"Get spikes (CUDA)");
-	m.def("getSpikesLB"  ,  &getSpikesCudaLB,   "Get spikes with lower bound on neuron state(CUDA)");
-	m.def("spikeGrads"   ,  &spikeGradsCuda,	"Get spike gradients (CUDA)");
-	m.def("conv"     	 , 	&convCuda      , 	"Convolution in time (CUDA)");
-	m.def("corr"     	 , 	&corrCuda      , 	"Correlation in time (CUDA)");
-	m.def("shift"    	 , 	&shiftCuda     , 	"Element shift in time (CUDA)");
-	m.def("shift"    	 , 	&shift1Cuda    , 	"Element shift in time (CUDA)");
-	m.def("shift"    	 , 	&shiftFlCuda   , 	"Element shift in time (CUDA)");
-	m.def("shift"    	 , 	&shiftFl1Cuda  , 	"Element shift in time (CUDA)");
+	m.def("getSpikes" 	  ,  &getSpikesCuda      , 	"Get spikes (CUDA)");
+	m.def("getSpikesLB"   ,  &getSpikesCudaLB    ,  "Get spikes with lower bound on neuron state(CUDA)");
+	m.def("spikeGrads"    ,  &spikeGradsCuda     ,	"Get spike gradients (CUDA)");
+	m.def("spikeGradsFull",  &spikeGradsFullCuda ,	"Get spike gradients from input to output spikes (CUDA)");
+	m.def("conv"     	  ,  &convCuda           , 	"Convolution in time (CUDA)");
+	m.def("corr"     	  ,  &corrCuda           , 	"Correlation in time (CUDA)");
+	m.def("shift"    	  ,  &shiftCuda          , 	"Element shift in time (CUDA)");
+	m.def("shift"    	  ,  &shift1Cuda         , 	"Element shift in time (CUDA)");
+	m.def("shift"    	  ,  &shiftFlCuda        , 	"Element shift in time (CUDA)");
+	m.def("shift"    	  ,  &shiftFl1Cuda       , 	"Element shift in time (CUDA)");
 }
