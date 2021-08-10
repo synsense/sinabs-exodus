@@ -96,7 +96,7 @@ class SpikingLayer(SpikingLayerBase):
         if self.threshold_low is not None:
             return spikeFunctionLB(
                 vmem,
-                -self.ref_kernel,
+                self.membrane_subtract,
                 self.threshold,
                 self.threshold_low,
                 self.window_abs,
@@ -106,7 +106,7 @@ class SpikingLayer(SpikingLayerBase):
         else:
             return spikeFunction(
                 vmem,
-                -self.ref_kernel,
+                self.membrane_subtract,
                 self.threshold,
                 self.window_abs,
                 self.scale_grads,

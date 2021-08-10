@@ -11,54 +11,90 @@
 
 // C++ Python interface
 
-torch::Tensor getSpikesCuda(torch::Tensor d_u, const torch::Tensor& d_nu, const float theta, const float Ts)
+torch::Tensor getSpikesCuda(
+	torch::Tensor d_u,
+	const float membrSubtract,
+	const float theta)
 {
 	CHECK_INPUT(d_u);
-	CHECK_INPUT(d_nu);
-
-	// check if tensor are in same device
-	CHECK_DEVICE(d_u, d_nu);
-
-	auto d_s = torch::zeros_like(d_u);
-
-	// TODO implement for different data types
 
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(d_u.device().index());
 
-	unsigned nuSize = d_nu.size(-1);
+	// Tensor to collect output spikes
+	auto d_s = torch::zeros_like(d_u);
+
 	unsigned Ns = d_u.size(-1);
 	unsigned nNeurons = d_u.size(0);
-	getSpikes<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), d_nu.data_ptr<float>(), nNeurons, nuSize, Ns, theta, Ts);
+	getSpikes<float>(
+		d_s.data_ptr<float>(),
+		d_u.data_ptr<float>(),
+		membrSubtract, nNeurons, Ns, theta);
 
 	return d_s;
 }
 
-torch::Tensor getSpikesCudaLB(torch::Tensor d_u, const torch::Tensor& d_nu, const float theta, const float theta_low, const float Ts)
+torch::Tensor getSpikesCudaLB(
+	torch::Tensor d_u,
+	const float membrSubtract,
+	const float theta,
+	const float theta_low)
 {
 	CHECK_INPUT(d_u);
-	CHECK_INPUT(d_nu);
-
-	// check if tensor are in same device
-	CHECK_DEVICE(d_u, d_nu);
-
-	auto d_s = torch::zeros_like(d_u);
-
-	// TODO implement for different data types
 
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(d_u.device().index());
 
-	unsigned nuSize = d_nu.size(-1);
+	// Tensor to collect output spikes
+	auto d_s = torch::zeros_like(d_u);
+
 	unsigned Ns = d_u.size(-1);
 	unsigned nNeurons = d_u.size(0);
-	getSpikesLowBound<float>(d_s.data_ptr<float>(), d_u.data_ptr<float>(), d_nu.data_ptr<float>(), nNeurons, nuSize, Ns, theta, theta_low, Ts);
+	getSpikesLowBound<float>(
+		d_s.data_ptr<float>(),
+		d_u.data_ptr<float>(),
+		membrSubtract, nNeurons, Ns, theta, theta_low);
 
 	return d_s;
+}
+
+torch::Tensor spikeGradsRefrCuda(
+	const torch::Tensor& surr, const torch::Tensor& outGrad, const torch::Tensor& refr)
+{
+	CHECK_INPUT(surr);
+	CHECK_INPUT(outGrad);
+	CHECK_INPUT(refr);
+
+	// check if tensor are in same device
+	CHECK_DEVICE(surr, outGrad);
+	CHECK_DEVICE(surr, refr);
+
+	// set the current cuda device to wherever the tensor d_u resides
+	cudaSetDevice(surr.device().index());
+
+	unsigned refrSize = refr.size(-1);
+	unsigned Ns = surr.size(-1);
+	unsigned nNeurons = surr.size(0);
+
+	// jacobian
+	auto jaco = torch::zeros({nNeurons, Ns, Ns}, torch::dtype(torch::kFloat32).device(surr.device()));
+
+	// input gradients
+	auto inGrad = torch::zeros_like(surr);
+
+	spikeGradsRefr<float>(
+		inGrad.data_ptr<float>(),
+		outGrad.data_ptr<float>(),
+		jaco.data_ptr<float>(),
+		surr.data_ptr<float>(),
+		refr.data_ptr<float>(),
+		nNeurons, refrSize, Ns);
+
+	return inGrad;
 }
 
 torch::Tensor spikeGradsCuda(
-	const torch::Tensor& surr, const torch::Tensor& outGrad, float refr)
+	const torch::Tensor& surr, const torch::Tensor& outGrad, float membrSubtract)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outGrad);
@@ -75,13 +111,50 @@ torch::Tensor spikeGradsCuda(
 	// input gradients
 	auto inGrad = torch::empty_like(surr);
 
-	spikeGrads<float>(inGrad.data_ptr<float>(), outGrad.data_ptr<float>(), surr.data_ptr<float>(), refr, nNeurons, Ns);
+	spikeGrads<float>(
+		inGrad.data_ptr<float>(),
+		outGrad.data_ptr<float>(),
+		surr.data_ptr<float>(),
+		membrSubtract, nNeurons, Ns);
+
+	return inGrad;
+}
+
+torch::Tensor spikeGradsCudaLB(
+	const torch::Tensor& surr, const torch::Tensor& outGrad, const torch::Tensor& notClipped, float membrSubtract)
+{
+	CHECK_INPUT(surr);
+	CHECK_INPUT(outGrad);
+	CHECK_INPUT(notClipped);
+
+	// check if tensor are in same device
+	CHECK_DEVICE(surr, outGrad);
+	CHECK_DEVICE(surr, notClipped);
+
+	// set the current cuda device to wherever the tensor d_u resides
+	cudaSetDevice(surr.device().index());
+
+	unsigned Ns = surr.size(-1);
+	unsigned nNeurons = surr.size(0);
+
+	// input gradients
+	auto inGrad = torch::empty_like(surr);
+
+	spikeGradsLB<float>(
+		inGrad.data_ptr<float>(),
+		outGrad.data_ptr<float>(),
+		surr.data_ptr<float>(),
+		notClipped.data_ptr<float>(),
+		membrSubtract, nNeurons, Ns);
 
 	return inGrad;
 }
 
 torch::Tensor spikeGradsFullCuda(
-	const torch::Tensor& surr, const torch::Tensor& outGrad, const torch::Tensor& notClipped, float refr)
+	const torch::Tensor& surr,
+	const torch::Tensor& outGrad,
+	const torch::Tensor& notClipped,
+	float refr)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outGrad);
@@ -98,7 +171,12 @@ torch::Tensor spikeGradsFullCuda(
 	// input gradients
 	auto inGrad = torch::empty_like(surr);
 
-	spikeGradsFull<float>(inGrad.data_ptr<float>(), outGrad.data_ptr<float>(), surr.data_ptr<float>(), notClipped.data_ptr<float>(), refr, nNeurons, Ns);
+	spikeGradsFull<float>(
+		inGrad.data_ptr<float>(),
+		outGrad.data_ptr<float>(),
+		surr.data_ptr<float>(),
+		notClipped.data_ptr<float>(),
+		refr, nNeurons, Ns);
 
 	return inGrad;
 }
@@ -202,7 +280,9 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
 	m.def("getSpikes" 	  ,  &getSpikesCuda      , 	"Get spikes (CUDA)");
 	m.def("getSpikesLB"   ,  &getSpikesCudaLB    ,  "Get spikes with lower bound on neuron state(CUDA)");
+	m.def("spikeGradsRefr",  &spikeGradsRefrCuda ,	"Get spike gradients with arbitrary refractory response(CUDA)");
 	m.def("spikeGrads"    ,  &spikeGradsCuda     ,	"Get spike gradients (CUDA)");
+	m.def("spikeGradsLB"  ,  &spikeGradsCudaLB   ,	"Get spike gradients with lower bounded vmem (CUDA)");
 	m.def("spikeGradsFull",  &spikeGradsFullCuda ,	"Get spike gradients from input to output spikes (CUDA)");
 	m.def("conv"     	  ,  &convCuda           , 	"Convolution in time (CUDA)");
 	m.def("corr"     	  ,  &corrCuda           , 	"Correlation in time (CUDA)");

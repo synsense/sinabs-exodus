@@ -1,5 +1,8 @@
-import torch
+from warnings import warn
 from typing import Optional, List
+
+import torch
+
 from sinabs.slayer.kernels import psp_kernels, exp_kernel
 from sinabs.slayer.psp import generateEpsp
 from sinabs.layers.pack_dims import squeeze_class
@@ -51,6 +54,11 @@ class LIF(SpikingLayer):
         if membrane_reset:
             raise NotImplementedError("Membrane reset not implemented for this layer.")
 
+        if threshold_low is not None:
+            warn(
+                "Using a lower threshold with this layer results in slower backward computation."
+            )
+
         super().__init__(
             *args,
             **kwargs,
@@ -68,13 +76,10 @@ class LIF(SpikingLayer):
         self.tau_syn = tau_syn
         self.n_syn = len(tau_syn)
 
-        # - Initialize kernels
+        # - Initialize kernel
         epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0)
-        ref_kernel = exp_kernel(tau_mem, dt=1.0) * threshold
-        assert ref_kernel.ndim == 1
 
         self.register_buffer("epsp_kernel", epsp_kernel)
-        self.register_buffer("ref_kernel", ref_kernel)
 
     def synaptic_output(self, input_spikes: torch.Tensor) -> torch.Tensor:
         """
