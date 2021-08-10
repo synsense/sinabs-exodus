@@ -188,8 +188,6 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             Integer spike raster. Same shape as ``membr_pot``
         """
 
-        if not inp.is_contiguous():
-            raise ValueError("'inp' has to be contiguous.")
         if not inp.ndim == 2:
             raise ValueError("'inp' must be 2D, (N, Time)")
         if threshold_low is not None and threshold <= threshold_low:

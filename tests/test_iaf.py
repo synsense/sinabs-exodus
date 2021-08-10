@@ -78,8 +78,16 @@ def build_sinabs_model(
             return out
 
         def reset_states(self):
-            for lyr in [self.spk1, self.spk2, self.spk3]:
+            for lyr in self.spiking_layers:
                 lyr.reset_states()
+
+        def zero_grad(self):
+            for lyr in self.spiking_layers:
+                lyr.zero_grad()
+
+        @property
+        def spiking_layers(self):
+            return [self.spk1, self.spk2, self.spk3]
 
     return TestModel()
 
@@ -144,6 +152,18 @@ def build_slayer_model(
             out = self.lin3(out)
             out = self.spk3(out)
             return out
+
+        def reset_states(self):
+            for lyr in self.spiking_layers:
+                lyr.reset_states()
+
+        def zero_grad(self):
+            for lyr in self.spiking_layers:
+                lyr.zero_grad()
+
+        @property
+        def spiking_layers(self):
+            return [self.spk1, self.spk2, self.spk3]
 
     return TestModel()
 
@@ -262,7 +282,7 @@ def test_slayer_vs_sinabs_compare():
 
     for i in range(3):
         # Sinabs
-        sinabs_model.reset_states()
+        sinabs_model.zero_grad()
         optim_sinabs.zero_grad()
         t_start = time.time()
         sinabs_out = sinabs_model(input_data.view((-1, n_channels)))
@@ -278,8 +298,9 @@ def test_slayer_vs_sinabs_compare():
         print("Sinabs model: ", sinabs_out.sum())
 
         # Slayer
-        t_start = time.time()
+        slayer_model.zero_grad()
         optim_slayer.zero_grad()
+        t_start = time.time()
         slayer_out = slayer_model(input_data)
         loss_slayer = torch.nn.functional.mse_loss(
             slayer_out, torch.ones_like(slayer_out)
@@ -289,7 +310,6 @@ def test_slayer_vs_sinabs_compare():
         optim_slayer.step()
         t_stop = time.time()
         print(f"Runtime slayer: {t_stop - t_start}")
-
         print("Slayer model: ", slayer_out.sum())
         # print(slayer_out)
 
@@ -304,6 +324,12 @@ def test_slayer_vs_sinabs_compare():
         # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
         # plt.show()
 
+        assert all(
+            torch.allclose(l_sin.state, l_slyr.state)
+            for (l_sin, l_slyr) in zip(
+                slayer_model.spiking_layers, sinabs_model.spiking_layers
+            )
+        )
         assert (sinabs_out == slayer_out).all()
 
         # Compare gradients
@@ -339,11 +365,100 @@ def test_slayer_vs_sinabs_compare_thr_low():
         threshold_low=-1,
     ).to(device)
 
-    def scale_all_weights_by_x(model, x):
-        for param in model.parameters():
-            param.data = param.data * x
+    # Copy parameters
+    slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
+    slayer_model.lin2.weight.data = sinabs_model.lin2.weight.data.clone()
+    slayer_model.lin3.weight.data = sinabs_model.lin3.weight.data.clone()
 
-    scale_all_weights_by_x(sinabs_model, 1.0)
+    # Optimizers for comparing gradients
+    optim_slayer = torch.optim.SGD(slayer_model.parameters(), lr=1e-3)
+    optim_sinabs = torch.optim.SGD(sinabs_model.parameters(), lr=1e-3)
+
+    for i in range(3):
+        # Sinabs
+        sinabs_model.zero_grad()
+        optim_sinabs.zero_grad()
+        t_start = time.time()
+        sinabs_out = sinabs_model(input_data.view((-1, n_channels)))
+        loss_sinabs = torch.nn.functional.mse_loss(
+            sinabs_out, torch.ones_like(sinabs_out)
+        )
+        loss_sinabs.backward()
+        grads_sinabs = [p.grad.data.clone() for p in sinabs_model.parameters()]
+        optim_sinabs.step()
+
+        t_stop = time.time()
+        print(f"Runtime sinabs: {t_stop - t_start}")
+        print("Sinabs model: ", sinabs_out.sum())
+
+        # Slayer
+        slayer_model.zero_grad()
+        optim_slayer.zero_grad()
+        t_start = time.time()
+        slayer_out = slayer_model(input_data)
+        loss_slayer = torch.nn.functional.mse_loss(
+            slayer_out, torch.ones_like(slayer_out)
+        )
+        loss_slayer.backward()
+        grads_slayer = [p.grad.data.clone() for p in slayer_model.parameters()]
+        optim_slayer.step()
+        t_stop = time.time()
+        print(f"Runtime slayer: {t_stop - t_start}")
+
+        print("Slayer model: ", slayer_out.sum())
+        # print(slayer_out)
+
+        ## Plot data
+        # import matplotlib.pyplot as plt
+        # plt.plot(sinabs_model.spk1.record[:, 0, 0].detach().cpu(), label="sinabs")
+        # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
+        # plt.legend()
+        # plt.show()
+        # plt.figure()
+        # plt.scatter(*np.where(sinabs_out.cpu().detach().numpy()), marker=".")
+        # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
+        # plt.show()
+
+        assert all(
+            torch.allclose(l_sin.state, l_slyr.state)
+            for (l_sin, l_slyr) in zip(
+                slayer_model.spiking_layers, sinabs_model.spiking_layers
+            )
+        )
+        assert (sinabs_out == slayer_out).all()
+
+        # Compare gradients
+        assert all(torch.allclose(g0, g1) for g0, g1 in zip(grads_sinabs, grads_slayer))
+
+
+def test_slayer_vs_sinabs_compare_thr_low_reset():
+    import torch
+    import time
+
+    num_timesteps = 500
+    n_channels = 16
+    batch_size = 100
+    n_classes = 10
+    device = "cuda:0"
+
+    # Define inputs
+    input_data = (
+        (torch.rand((num_timesteps * batch_size, n_channels)) > 0.95).float().to(device)
+    )
+
+    # Define models
+    slayer_model = build_slayer_model(
+        n_channels=n_channels,
+        n_classes=n_classes,
+        num_timesteps=num_timesteps,
+        threshold_low=-1,
+    ).to(device)
+    sinabs_model = build_sinabs_model(
+        n_channels=n_channels,
+        n_classes=n_classes,
+        batch_size=batch_size,
+        threshold_low=-1,
+    ).to(device)
 
     # Copy parameters
     slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
@@ -372,8 +487,9 @@ def test_slayer_vs_sinabs_compare_thr_low():
         print("Sinabs model: ", sinabs_out.sum())
 
         # Slayer
-        t_start = time.time()
+        slayer_model.reset_states()
         optim_slayer.zero_grad()
+        t_start = time.time()
         slayer_out = slayer_model(input_data)
         loss_slayer = torch.nn.functional.mse_loss(
             slayer_out, torch.ones_like(slayer_out)
@@ -398,6 +514,12 @@ def test_slayer_vs_sinabs_compare_thr_low():
         # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
         # plt.show()
 
+        assert all(
+            torch.allclose(l_sin.state, l_slyr.state)
+            for (l_sin, l_slyr) in zip(
+                slayer_model.spiking_layers, sinabs_model.spiking_layers
+            )
+        )
         assert (sinabs_out == slayer_out).all()
 
         # Compare gradients

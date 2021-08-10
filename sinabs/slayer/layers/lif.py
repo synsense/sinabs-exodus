@@ -59,6 +59,8 @@ class LIF(SpikingLayer):
                 "Using a lower threshold with this layer results in slower backward computation."
             )
 
+        warn("This layer currently does not store states between forward calls.")
+
         super().__init__(
             *args,
             **kwargs,
