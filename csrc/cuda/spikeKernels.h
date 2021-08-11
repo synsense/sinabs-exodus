@@ -302,7 +302,7 @@ __global__ void spikeGradsKernelLB(
  *
  * inputGrad_i = surr_i * outputGrad_i * notClipped_{i} +
  * 				 \sum_{j=i}^{N_s - 1} outputGrad_j * surr_j *
- * 				 * \prod_{k=i}^{j-1} (1 + surr_k * membrSubtract) * notClipped_{k}
+ * 				 * \prod_{k=i}^{j-1} (1 - surr_k * membrSubtract) * notClipped_{k}
  * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
  * 					input gradients are to be written
  * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
