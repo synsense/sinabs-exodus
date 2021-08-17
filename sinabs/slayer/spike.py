@@ -195,8 +195,8 @@ class SpikeFunctionIterForward(torch.autograd.Function):
 
         time_steps = inp.shape[1]
 
-        spikes = torch.zeros_like(inp)
         states = torch.zeros_like(inp)
+        spikes = []
 
         for t in range(time_steps):
 
@@ -211,7 +211,10 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             activations = (state > 0) * torch.div(
                 state, threshold, rounding_mode="floor"
             )
-            spikes[:, t] = activations
+
+            spikes.append(activations)
+
+        output_spikes = torch.stack(spikes).transpose(0, 1)
 
         ctx.threshold = threshold
         ctx.threshold_low = threshold_low
@@ -220,7 +223,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         ctx.membrane_subtract = membrane_subtract
         ctx.save_for_backward(states)
 
-        return spikes, states
+        return output_spikes, states
 
     @staticmethod
     def backward(ctx, grad_output, grad_state):
