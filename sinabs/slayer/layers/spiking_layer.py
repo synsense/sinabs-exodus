@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 
+import torch
+
 from sinabs.slayer.spike import spikeFunction, spikeFunctionLB
 from sinabs.layers import SpikingLayer as SpikingLayerBase
 
@@ -21,7 +23,7 @@ class SpikingLayer(SpikingLayerBase):
         threshold: float = 1.0,
         threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
-        tau_learning: float = 0.5,
+        window: float = 1.0,
         scale_grads: float = 1.0,
         membrane_reset=False,
         *args,
@@ -44,8 +46,9 @@ class SpikingLayer(SpikingLayerBase):
         membrane_subtract: Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
-        tau_learning: float
-            How fast do surrogate gradients decay around thresholds.
+        window: float
+            Distance between step of Heaviside surrogate gradient and threshold.
+            (Relative to size of threshold)
         scale_grads: float
             Scale surrogate gradients in backpropagation.
         membrane_reset: bool
@@ -66,7 +69,7 @@ class SpikingLayer(SpikingLayerBase):
 
         # - Store hyperparameters
         self.scale_grads = scale_grads
-        self.tau_learning = tau_learning
+        self.window_abs = window * threshold
         self._num_timesteps = num_timesteps
 
     def spike_function(self, vmem: "torch.tensor") -> "torch.tensor":
@@ -93,19 +96,19 @@ class SpikingLayer(SpikingLayerBase):
         if self.threshold_low is not None:
             return spikeFunctionLB(
                 vmem,
-                -self.ref_kernel,
+                self.membrane_subtract,
                 self.threshold,
                 self.threshold_low,
-                self.tau_learning,
+                self.window_abs,
                 self.scale_grads,
             )
 
         else:
             return spikeFunction(
                 vmem,
-                -self.ref_kernel,
+                self.membrane_subtract,
                 self.threshold,
-                self.tau_learning,
+                self.window_abs,
                 self.scale_grads,
             )
 
@@ -163,6 +166,6 @@ class SpikingLayer(SpikingLayerBase):
         param_dict = super()._param_dict()
         param_dict.update(
             scale_grads=self.scale_grads,
-            tau_learning=self.tau_learning,
+            window=self.window_abs / self.threshold,
             num_timesteps=self.num_timesteps,
         )

@@ -1,7 +1,7 @@
 from typing import Optional
 
 from sinabs.slayer.kernels import heaviside_kernel
-from sinabs.slayer.psp import generateEpsp
+from sinabs.slayer.spike import spikeFunctionIterForward
 from sinabs.layers.pack_dims import squeeze_class
 from sinabs.slayer.layers import SpikingLayer
 
@@ -16,7 +16,7 @@ class IAF(SpikingLayer):
         threshold: float = 1.0,
         threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
-        tau_learning: float = 0.5,
+        window: float = 1.0,
         scale_grads: float = 1.0,
         membrane_reset=False,
         *args,
@@ -36,8 +36,8 @@ class IAF(SpikingLayer):
         membrane_subtract: Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
-        tau_learning: float
-            How fast do surrogate gradients decay around thresholds.
+        window: float
+            Distance between step of Heaviside surrogate gradient and threshold.
         scale_grads: float
             Scale surrogate gradients in backpropagation.
         membrane_reset: bool
@@ -51,7 +51,7 @@ class IAF(SpikingLayer):
             num_timesteps=num_timesteps,
             threshold=threshold,
             threshold_low=threshold_low,
-            tau_learning=tau_learning,
+            window=window,
             scale_grads=scale_grads,
             membrane_subtract=membrane_subtract,
             membrane_reset=membrane_reset,
@@ -64,6 +64,52 @@ class IAF(SpikingLayer):
 
         self.register_buffer("epsp_kernel", epsp_kernel)
         self.register_buffer("ref_kernel", ref_kernel)
+
+    def spike_function(self, spike_input):
+        """
+        Generate membrane potential and output spikes from membrane potential.
+
+        Parameters
+        ----------
+        spike_input : torch.tensor
+            Input spikes. Expected shape: (batches x neurons, time)
+            Has to be contiguous.
+
+        Returns:
+        --------
+        torch.tensor
+            Membrane potential. Same shape as `spike_input`
+        torch.tensor
+            Output spikes. Same shape as `spike_input`
+        """
+        return spikeFunctionIterForward(
+            spike_input,
+            self.membrane_subtract,
+            self.state.flatten(),
+            self.activations.flatten(),
+            self.threshold,
+            self.threshold_low,
+            self.window_abs,
+            self.scale_grads,
+        )
+
+    def _update_neuron_states(
+        self, vmem: "torch.tensor", output_spikes: "torch.tensor"
+    ):
+        """
+        Update neuron states based on membrane potential and output spikes of
+        last evolution.
+
+        Parameters
+        ----------
+        vmem : torch.tensor
+            Membrane potential of last evolution. Shape: (batches, num_timesteps, *neurons)
+        output_spikes : torch.tensor
+            Output spikes of last evolution. Shape: (batches, num_timesteps, *neurons)
+        """
+
+        self.state = vmem[:, -1].clone()
+        self.activations = output_spikes[:, -1].clone()
 
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
@@ -84,6 +130,9 @@ class IAF(SpikingLayer):
 
         n_batches, num_timesteps, *n_neurons = spike_input.shape
 
+        if not hasattr(self, "state") or self.state.shape != (n_batches, *n_neurons):
+            self.reset_states(shape=(n_batches, *n_neurons), randomize=False)
+
         # Make sure time dimension matches
         if num_timesteps != self.num_timesteps:
             raise ValueError(
@@ -93,14 +142,19 @@ class IAF(SpikingLayer):
         # Move time to last dimension -> (n_batches, *neuron_shape, num_timesteps)
         spike_input = spike_input.movedim(1, -1)
         # Flatten out all dimensions that can be processed in parallel and ensure contiguity
-        spike_input = spike_input.reshape(-1, num_timesteps).contiguous()
+        spike_input = spike_input.reshape(-1, num_timesteps)
         # -> (n_parallel, num_timesteps)
 
-        vmem = generateEpsp(spike_input, self.epsp_kernel).contiguous()
+        output_spikes, states = self.spike_function(spike_input)
 
-        output_spikes = self.spike_function(vmem)
+        # Reshape output spikes and vmem, store states in vmem
+        output_spikes = self._post_spike_processing(
+            states, output_spikes, n_batches, n_neurons
+        )
 
-        return self._post_spike_processing(vmem, output_spikes, n_batches, n_neurons)
+        self._update_neuron_states(self.vmem, output_spikes)
+
+        return output_spikes
 
 
 # Class to accept data with batch and time dimensions combined

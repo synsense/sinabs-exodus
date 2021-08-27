@@ -1,11 +1,12 @@
-import torch
+from warnings import warn
 from typing import Optional, List
+
+import torch
+
 from sinabs.slayer.kernels import psp_kernels, exp_kernel
 from sinabs.slayer.psp import generateEpsp
 from sinabs.layers.pack_dims import squeeze_class
 from sinabs.slayer.layers import SpikingLayer
-
-window = 1.0
 
 
 class LIF(SpikingLayer):
@@ -17,7 +18,7 @@ class LIF(SpikingLayer):
         threshold: float = 1.0,
         threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
-        tau_learning: float = 0.5,
+        window: float = 1.0,
         scale_grads: float = 1.0,
         membrane_reset=False,
         *args,
@@ -42,8 +43,8 @@ class LIF(SpikingLayer):
         membrane_subtract : Optional[float]
             Constant to be subtracted from membrane potential when neuron spikes.
             If ``None`` (default): Same as ``threshold``.
-        tau_learning : float
-            How fast do surrogate gradients decay around thresholds.
+        window: float
+            Distance between step of Heaviside surrogate gradient and threshold.
         scale_grads : float
             Scale surrogate gradients in backpropagation.
         membrane_reset : bool
@@ -53,13 +54,20 @@ class LIF(SpikingLayer):
         if membrane_reset:
             raise NotImplementedError("Membrane reset not implemented for this layer.")
 
+        if threshold_low is not None:
+            warn(
+                "Using a lower threshold with this layer results in slower backward computation."
+            )
+
+        warn("This layer currently does not store states between forward calls.")
+
         super().__init__(
             *args,
             **kwargs,
             num_timesteps=num_timesteps,
             threshold=threshold,
             threshold_low=threshold_low,
-            tau_learning=tau_learning,
+            window=window,
             scale_grads=scale_grads,
             membrane_subtract=membrane_subtract,
             membrane_reset=membrane_reset,
@@ -70,13 +78,10 @@ class LIF(SpikingLayer):
         self.tau_syn = tau_syn
         self.n_syn = len(tau_syn)
 
-        # - Initialize kernels
+        # - Initialize kernel
         epsp_kernel = psp_kernels(tau_mem=tau_mem, tau_syn=tau_syn, dt=1.0)
-        ref_kernel = exp_kernel(tau_mem, dt=1.0) * threshold
-        assert ref_kernel.ndim == 1
 
         self.register_buffer("epsp_kernel", epsp_kernel)
-        self.register_buffer("ref_kernel", ref_kernel)
 
     def synaptic_output(self, input_spikes: torch.Tensor) -> torch.Tensor:
         """
