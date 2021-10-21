@@ -19,7 +19,6 @@ class SpikingLayer(SpikingLayerBase):
 
     def __init__(
         self,
-        num_timesteps: Optional[int] = None,
         threshold: float = 1.0,
         threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
@@ -37,8 +36,6 @@ class SpikingLayer(SpikingLayerBase):
 
         Parameters:
         -----------
-        num_timesteps: int
-            Number of timesteps per sample.
         threshold: float
             Spiking threshold of the neuron.
         threshold_low: Optional[float]
@@ -70,7 +67,6 @@ class SpikingLayer(SpikingLayerBase):
         # - Store hyperparameters
         self.scale_grads = scale_grads
         self.window_abs = window * threshold
-        self._num_timesteps = num_timesteps
 
     def spike_function(self, vmem: "torch.tensor") -> "torch.tensor":
         """
@@ -138,14 +134,14 @@ class SpikingLayer(SpikingLayerBase):
         Returns
         -------
         torch.tensor
-            Output spikes. Shape: (n_batches, num_timesteps, *n_neurons)
+            Output spikes. Shape: (n_batches, time, *n_neurons)
         """
 
-        # Separate batch and neuron dimensions -> (batches, *neurons, num_timesteps)
-        vmem = vmem.reshape(n_batches, *n_neurons, self.num_timesteps)
-        output_spikes = output_spikes.reshape(n_batches, *n_neurons, self.num_timesteps)
+        # Separate batch and neuron dimensions -> (batches, *neurons, time)
+        vmem = vmem.reshape(n_batches, *n_neurons, -1)
+        output_spikes = output_spikes.reshape(n_batches, *n_neurons, -1)
 
-        # Move time dimension to second -> (batches, num_timesteps, *neurons)
+        # Move time dimension to second -> (batches, time, *neurons)
         vmem = vmem.movedim(-1, 1)
         output_spikes = output_spikes.movedim(-1, 1)
 
@@ -158,14 +154,8 @@ class SpikingLayer(SpikingLayerBase):
         return output_spikes
 
     @property
-    def num_timesteps(self):
-        return self._num_timesteps
-
-    @property
     def _param_dict(self) -> dict:
         param_dict = super()._param_dict()
         param_dict.update(
-            scale_grads=self.scale_grads,
-            window=self.window_abs / self.threshold,
-            num_timesteps=self.num_timesteps,
+            scale_grads=self.scale_grads, window=self.window_abs / self.threshold
         )

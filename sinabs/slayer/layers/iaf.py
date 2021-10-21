@@ -57,14 +57,6 @@ class IAF(SpikingLayer):
             membrane_reset=membrane_reset,
         )
 
-        # - Initialize kernels
-        epsp_kernel = heaviside_kernel(size=num_timesteps, scale=1.0)
-        ref_kernel = heaviside_kernel(size=num_timesteps, scale=self.membrane_subtract)
-        assert ref_kernel.ndim == 1
-
-        self.register_buffer("epsp_kernel", epsp_kernel)
-        self.register_buffer("ref_kernel", ref_kernel)
-
     def spike_function(self, spike_input):
         """
         Generate membrane potential and output spikes from membrane potential.
