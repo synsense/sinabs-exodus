@@ -24,10 +24,6 @@ def test_iaf_inference():
     ).to(device)
     layer = IAF(num_timesteps=num_timesteps, threshold=threshold).to(device)
 
-    # Make sure wrong input dimensions are detected
-    with pytest.raises(ValueError):
-        output = layer(torch.rand((batch_size, num_timesteps + 1, *n_neurons)))
-
     output = layer(input_data)
     assert output.shape == input_data.shape
 
@@ -112,6 +108,7 @@ def build_slayer_model(
     n_channels=16,
     n_classes=10,
     num_timesteps=100,
+    batch_size=None,
     scale_grads=1.0,
     threshold=1.0,
     threshold_low=None,
@@ -125,6 +122,7 @@ def build_slayer_model(
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
             self.spk1 = IAFSqueeze(
                 num_timesteps=num_timesteps,
+                batch_size=batch_size,
                 threshold=threshold,
                 threshold_low=threshold_low,
                 scale_grads=scale_grads,
@@ -132,6 +130,7 @@ def build_slayer_model(
             self.lin2 = nn.Linear(16, 32, bias=False)
             self.spk2 = IAFSqueeze(
                 num_timesteps=num_timesteps,
+                batch_size=batch_size,
                 threshold=threshold,
                 threshold_low=threshold_low,
                 scale_grads=scale_grads,
@@ -139,6 +138,7 @@ def build_slayer_model(
             self.lin3 = nn.Linear(32, n_classes, bias=False)
             self.spk3 = IAFSqueeze(
                 num_timesteps=num_timesteps,
+                batch_size=batch_size,
                 threshold=threshold,
                 threshold_low=threshold_low,
                 scale_grads=scale_grads,
@@ -178,6 +178,24 @@ def test_slayer_model():
     device = "cuda:0"
     model = build_slayer_model(
         n_channels=n_channels, n_classes=n_classes, num_timesteps=num_timesteps
+    ).to(device)
+
+    input_data = torch.rand((num_timesteps * batch_size, n_channels)).to(device)
+
+    out = model(input_data)
+    assert out.shape == (num_timesteps * batch_size, n_classes)
+
+
+def test_slayer_model_batch():
+    import torch
+
+    num_timesteps = 100
+    n_channels = 16
+    batch_size = 2
+    n_classes = 10
+    device = "cuda:0"
+    model = build_slayer_model(
+        n_channels=n_channels, n_classes=n_classes, batch_size=batch_size
     ).to(device)
 
     input_data = torch.rand((num_timesteps * batch_size, n_channels)).to(device)

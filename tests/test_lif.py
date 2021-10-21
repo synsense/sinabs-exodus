@@ -44,10 +44,6 @@ def test_lif_inference():
         output = layer(
             torch.rand((batch_size, num_timesteps, len(tau_syn) + 1, n_neurons))
         )
-    with pytest.raises(ValueError):
-        output = layer(
-            torch.rand((batch_size, num_timesteps + 1, len(tau_syn), n_neurons))
-        )
 
     output = layer(input_data)
     assert output.shape == (batch_size, num_timesteps, n_neurons)
@@ -135,9 +131,10 @@ def test_sinabs_model():
 
 
 def build_slayer_model(
-    num_timesteps,
     tau_mem,
     tau_syn,
+    num_timesteps=None,
+    batch_size=None,
     n_channels=16,
     n_classes=10,
     scale_grads=1.0,
@@ -154,6 +151,7 @@ def build_slayer_model(
             self.lin1 = nn.Linear(n_channels, 16 * 2, bias=False)
             self.spk1 = LIF(
                 num_timesteps=num_timesteps,
+                batch_size=batch_size,
                 tau_mem=tau_mem,
                 tau_syn=tau_syn,
                 threshold=threshold,
@@ -164,6 +162,7 @@ def build_slayer_model(
             self.lin2 = nn.Linear(16, 2 * 32, bias=False)
             self.spk2 = LIF(
                 num_timesteps=num_timesteps,
+                batch_size=batch_size,
                 tau_mem=tau_mem,
                 tau_syn=tau_syn,
                 threshold=threshold,
@@ -174,6 +173,7 @@ def build_slayer_model(
             self.lin3 = nn.Linear(32, self.n_syn * n_classes, bias=False)
             self.spk3 = LIF(
                 num_timesteps=num_timesteps,
+                batch_size=batch_size,
                 tau_mem=tau_mem,
                 tau_syn=tau_syn,
                 threshold=threshold,
@@ -215,6 +215,30 @@ def test_slayer_model():
         n_channels=n_channels,
         n_classes=n_classes,
         num_timesteps=num_timesteps,
+    ).to(device)
+    input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
+
+    out = model(input_data)
+    assert out.shape == (batch_size, num_timesteps, n_classes)
+
+
+def test_slayer_model_batch():
+    import torch
+    import numpy as np
+
+    num_timesteps = 100
+    n_channels = 16
+    batch_size = 1
+    n_classes = 10
+    device = "cuda:0"
+    tau_mem = 10
+    tau_syn = np.array([5.0, 15.0])
+    model = build_slayer_model(
+        tau_mem=tau_mem,
+        tau_syn=tau_syn,
+        n_channels=n_channels,
+        n_classes=n_classes,
+        batch_size=batch_size,
     ).to(device)
     input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
 
