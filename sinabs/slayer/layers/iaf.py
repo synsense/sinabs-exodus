@@ -12,7 +12,6 @@ __all__ = ["IAF", "IAFSqueeze"]
 class IAF(SpikingLayer):
     def __init__(
         self,
-        num_timesteps: int,
         threshold: float = 1.0,
         threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
@@ -27,8 +26,6 @@ class IAF(SpikingLayer):
 
         Parameters:
         -----------
-        num_timesteps: int
-            Number of timesteps per sample.
         threshold: float
             Spiking threshold of the neuron.
         threshold_low: Optional[float]
@@ -48,7 +45,6 @@ class IAF(SpikingLayer):
             raise NotImplementedError("Membrane reset not implemented for this layer.")
 
         super().__init__(
-            num_timesteps=num_timesteps,
             threshold=threshold,
             threshold_low=threshold_low,
             window=window,
@@ -56,14 +52,6 @@ class IAF(SpikingLayer):
             membrane_subtract=membrane_subtract,
             membrane_reset=membrane_reset,
         )
-
-        # - Initialize kernels
-        epsp_kernel = heaviside_kernel(size=num_timesteps, scale=1.0)
-        ref_kernel = heaviside_kernel(size=num_timesteps, scale=self.membrane_subtract)
-        assert ref_kernel.ndim == 1
-
-        self.register_buffer("epsp_kernel", epsp_kernel)
-        self.register_buffer("ref_kernel", ref_kernel)
 
     def spike_function(self, spike_input):
         """
@@ -132,12 +120,6 @@ class IAF(SpikingLayer):
 
         if not hasattr(self, "state") or self.state.shape != (n_batches, *n_neurons):
             self.reset_states(shape=(n_batches, *n_neurons), randomize=False)
-
-        # Make sure time dimension matches
-        if num_timesteps != self.num_timesteps:
-            raise ValueError(
-                f"Time (2nd) dimension of `spike_input` must be {self.num_timesteps}"
-            )
 
         # Move time to last dimension -> (n_batches, *neuron_shape, num_timesteps)
         spike_input = spike_input.movedim(1, -1)
