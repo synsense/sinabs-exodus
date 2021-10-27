@@ -134,10 +134,12 @@ class LIF(SpikingLayer):
 
         # Combine batch and all neuron dimensions (can be computed in parallel)
         # -> (synapses, batches x neurons, time)
-        syn_out = syn_out.reshape(n_syn, num_timesteps, -1).contiguous()
+        syn_out = syn_out.reshape(n_syn, -1, num_timesteps).contiguous()
 
         assert syn_out.ndim == 3
         assert self.epsp_kernel.ndim == 2
+        assert syn_out.shape[0] == n_syn
+        assert syn_out.shape[-1] == num_timesteps
 
         # Membrane potential from individual synaptic time constants
         vmem_syn = generateEpsp(syn_out, self.epsp_kernel)
