@@ -293,22 +293,23 @@ __global__ void spikeGradsKernelLB(
 
 
 /**
- * Assuming a function that calculates the output spikes of a IAF neuron (step-function
- * for input spike response and refractory response, arbitrary surrogate gradients) for a
- * given (synaptic) input, this kernel computes a single element (corresponding
- * to one time step) of the the input gradient for one neuron and/or batch.
+ * Assuming a function that calculates the output spikes of an IAF or LIF neuron (step-function
+ * or exponential for input spike response and step-function for refractory response, arbitrary
+ * surrogate gradients) for a given (synaptic) input, this kernel computes a single element 
+ * (corresponding to one time step) of the the input gradient for one neuron and/or batch.
  * It amounts to the scalar product of the output gradient with the derivative of
  * the spike output wrt. the input at the i-th timestep.
  *
  * inputGrad_i = surr_i * outputGrad_i * notClipped_{i} +
  * 				 \sum_{j=i}^{N_s - 1} outputGrad_j * surr_j *
- * 				 * \prod_{k=i}^{j-1} (1 - surr_k * membrSubtract) * notClipped_{k}
+ * 				 * \prod_{k=i}^{j-1} (alpha - surr_k * membrSubtract) * notClipped_{k}
  * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
  * 					input gradients are to be written
  * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
  * @param surr 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
  * @param notClipped 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
  * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
  * @param nNeurons Number of neurons/batches
  * @param Ns Number of timesteps
  */
@@ -318,7 +319,7 @@ __global__ void fullGradsKernel(
 	const T* __restrict__ outputGrad,
 	const T* __restrict__ surr,
 	const T* __restrict__ notClipped,
-	float membrSubtract, unsigned nNeurons, unsigned Ns)
+	float membrSubtract, float alpha, unsigned nNeurons, unsigned Ns)
 {
 	// Identifier corresponding to the element of the input gradient that is
 	// computed as well as the denominator in the derivatives
@@ -350,7 +351,7 @@ __global__ void fullGradsKernel(
 		// ID for current surrogate gradient and output gradient
 		linearSurrID = j + linearRowID;
 		// New factor to be accumulated
-		newFactor = 1.0f - membrSubtract * surr[linearSurrID - 1];
+		newFactor = alpha - membrSubtract * surr[linearSurrID - 1];
 		accGrad *= (newFactor * notClipped[linearSurrID]);
 		// Add new term to current gradient
 		inputGrad[inputGradID] += accGrad * surr[linearSurrID] * outputGrad[linearSurrID];
@@ -411,9 +412,10 @@ void spikeGradsRefr(T* inputGrad, const T* outputGrad, T* jaco, const T* surr, c
 
 
 /**
- * Assuming a function that calculates the output spikes of an IAF neuron (step-function
- * for input spike response and refractory response, arbitrary surrogate gradients) for a
- * given (synaptic) input, use the fullGradsKernel kernel to compute the input gradient.
+ * Assuming a function that calculates the output spikes of an IAF or LIF neuron (step-function
+ * or exponential for input spike response and step-function for refractory response, arbitrary
+ * surrogate gradients) for a given (synaptic) input, use the fullGradsKernel kernel to compute
+ * the input gradient.
  * It amounts to the product of the transposed Jacobian (derivative of output spikes wrt.
  * synaptic input, i.e. over the whole spike-response, resetting and spiking process)
  * and the output gradient.
@@ -436,6 +438,7 @@ void spikeGradsRefr(T* inputGrad, const T* outputGrad, T* jaco, const T* surr, c
  * 					 membrane potential has been clipped to a constant, which will
  * 					 result in 0 gradients at this point.
  * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
  * @param nNeurons Number of neurons/batches
  * @param Ns Number of timesteps
  */
@@ -445,7 +448,7 @@ void spikeGradsFull(
 	const T* outputGrad,
 	const T* surr,
 	const T* notClipped,
-	float membrSubtract, unsigned nNeurons, unsigned Ns)
+	float membrSubtract, float alpha, unsigned nNeurons, unsigned Ns)
 {
 	dim3 thread(128, 8, 1);
 
@@ -471,7 +474,7 @@ void spikeGradsFull(
 													outputGrad  + startOffset * Ns,
 													surr + startOffset * Ns,
 													notClipped + startOffset * Ns,
-													membrSubtract, neuronsInGrid, Ns);
+													membrSubtract, alpha, neuronsInGrid, Ns);
 	}
 }
 

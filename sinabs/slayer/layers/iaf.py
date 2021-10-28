@@ -85,6 +85,7 @@ class IAF(SpikingLayer):
         return spikeFunctionIterForward(
             spike_input,
             self.membrane_subtract,
+            1.0,
             self.state.flatten(),
             self.activations.flatten(),
             self.threshold,

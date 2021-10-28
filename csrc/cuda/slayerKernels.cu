@@ -154,7 +154,8 @@ torch::Tensor spikeGradsFullCuda(
 	const torch::Tensor& surr,
 	const torch::Tensor& outGrad,
 	const torch::Tensor& notClipped,
-	float refr)
+	float refr,
+    float alpha)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outGrad);
@@ -176,7 +177,7 @@ torch::Tensor spikeGradsFullCuda(
 		outGrad.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
-		refr, nNeurons, Ns);
+		refr, alpha, nNeurons, Ns);
 
 	return inGrad;
 }

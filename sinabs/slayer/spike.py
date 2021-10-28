@@ -152,6 +152,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         ctx,
         inp: torch.tensor,
         membrane_subtract: float,
+        alpha: float,
         state: torch.tensor,
         activations: torch.tensor,
         threshold: float,
@@ -171,6 +172,8 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             Has to be contiguous.
         membrane_subtract: float
             Value that is subracted from membrane potential after spike
+        alpha : float
+            State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
         threshold: float
             Firing threshold
         threshold_low: float
@@ -201,7 +204,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         for t in range(time_steps):
 
             # subtract a number of membrane_subtract's as there are spikes
-            state = inp[:, t] + state - activations * membrane_subtract
+            state = inp[:, t] + alpha * state - activations * membrane_subtract
             if threshold_low is not None:
                 # ReLU for efficient implementation of lower limit
                 state = torch.nn.functional.relu(state - threshold_low) + threshold_low
@@ -221,6 +224,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         ctx.scale_rho = scale_rho
         ctx.window = window or threshold
         ctx.membrane_subtract = membrane_subtract
+        ctx.alpha = alpha
         ctx.save_for_backward(states)
 
         return output_spikes, states
@@ -244,6 +248,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             grad_output.contiguous(),
             not_clipped.contiguous(),
             ctx.membrane_subtract,
+            ctx.alpha,
         )
 
         return ctx.scale_rho * grad_input, None, None, None, None, None, None, None
