@@ -12,7 +12,6 @@ from sinabs.slayer.layers import SpikingLayer
 class LIF(SpikingLayer):
     def __init__(
         self,
-        num_timesteps: int,
         tau_mem: float = 10.0,
         tau_syn: List[float] = [5.0],
         threshold: float = 1.0,
@@ -30,8 +29,6 @@ class LIF(SpikingLayer):
 
         Parameters:
         -----------
-        num_timesteps : int
-            Number of timesteps per sample.
         tau_mem : float
             Membrane time constant
         tau_syn : float
@@ -64,7 +61,6 @@ class LIF(SpikingLayer):
         super().__init__(
             *args,
             **kwargs,
-            num_timesteps=num_timesteps,
             threshold=threshold,
             threshold_low=threshold_low,
             window=window,
@@ -122,11 +118,7 @@ class LIF(SpikingLayer):
 
         n_batches, num_timesteps, n_syn, *n_neurons = spike_input.shape
 
-        # Make sure time and synapse dimensions match
-        if num_timesteps != self.num_timesteps:
-            raise ValueError(
-                f"Time (2nd) dimension of `spike_input` must be {self.num_timesteps}"
-            )
+        # Make sure synapse dimensions match
         if n_syn != self.n_syn:
             raise ValueError(
                 f"Synapse (3nd) dimension of `spike_input` must be {self.n_syn}"
@@ -142,10 +134,12 @@ class LIF(SpikingLayer):
 
         # Combine batch and all neuron dimensions (can be computed in parallel)
         # -> (synapses, batches x neurons, time)
-        syn_out = syn_out.reshape(n_syn, num_timesteps, -1).contiguous()
+        syn_out = syn_out.reshape(n_syn, -1, num_timesteps).contiguous()
 
         assert syn_out.ndim == 3
         assert self.epsp_kernel.ndim == 2
+        assert syn_out.shape[0] == n_syn
+        assert syn_out.shape[-1] == num_timesteps
 
         # Membrane potential from individual synaptic time constants
         vmem_syn = generateEpsp(syn_out, self.epsp_kernel)
