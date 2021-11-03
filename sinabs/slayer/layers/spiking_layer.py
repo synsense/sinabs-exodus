@@ -23,6 +23,7 @@ class IntegrateFireBase(SpikingLayer):
         window: float = 1.0,
         scale_grads: float = 1.0,
         alpha: float = 1.0,
+        record: bool = True,
         membrane_reset=False,
         *args,
         **kwargs,
@@ -45,9 +46,11 @@ class IntegrateFireBase(SpikingLayer):
             (Relative to size of threshold)
         scale_grads: float
             Scale surrogate gradients in backpropagation.
-        decay_factor: float
+        alpha: float
             Neuron state is multiplied by this factor at each timestep. For IAF dynamics
             set to 1, for LIF to exp(-dt/tau).
+        record: bool
+            Record membrane potential and spike output during forward call.
         membrane_reset: bool
             Currently not supported.
         """
@@ -70,6 +73,7 @@ class IntegrateFireBase(SpikingLayer):
         self.scale_grads = scale_grads
         self.window_abs = window * threshold
         self.alpha = alpha
+        self.record = record
 
     def spike_function(self, inp: "torch.tensor") -> "torch.tensor":
         """
@@ -216,4 +220,7 @@ class IntegrateFireBase(SpikingLayer):
             scale_grads=self.scale_grads,
             window=self.window_abs / self.threshold,
             alpha=self.alpha,
+            record=self.record,
         )
+
+        return param_dict

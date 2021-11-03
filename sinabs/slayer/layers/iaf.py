@@ -15,6 +15,7 @@ class IAF(IntegrateFireBase):
         membrane_subtract: Optional[float] = None,
         window: float = 1.0,
         scale_grads: float = 1.0,
+        record: bool = True,
         membrane_reset=False,
         *args,
         **kwargs,
@@ -35,6 +36,8 @@ class IAF(IntegrateFireBase):
             Distance between step of Heaviside surrogate gradient and threshold.
         scale_grads: float
             Scale surrogate gradients in backpropagation.
+        record: bool
+            Record membrane potential and spike output during forward call.
         membrane_reset: bool
             Currently not supported.
         """
@@ -48,6 +51,13 @@ class IAF(IntegrateFireBase):
             alpha=1.0,
             membrane_reset=membrane_reset,
         )
+
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict()
+        param_dict.pop("alpha")
+
+        return param_dict
 
 
 # Class to accept data with batch and time dimensions combined

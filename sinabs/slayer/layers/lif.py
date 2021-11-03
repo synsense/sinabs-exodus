@@ -18,6 +18,7 @@ class LIF(IntegrateFireBase):
         scale_grads: float = 1.0,
         tau_mem: float = 10.0,
         dt: float = 1.0,
+        record: bool = True,
         membrane_reset=False,
         *args,
         **kwargs,
@@ -43,6 +44,8 @@ class LIF(IntegrateFireBase):
             Simulation time step. Only used for calculating decay factor.
         scale_grads: float
             Scale surrogate gradients in backpropagation.
+        record: bool
+            Record membrane potential and spike output during forward call.
         membrane_reset: bool
             Currently not supported.
         """
@@ -53,7 +56,7 @@ class LIF(IntegrateFireBase):
             raise ValueError("`tau_mem` must be greater than `dt`.")
 
         self.dt = dt
-        self.tau_mem = tau_mem
+        tau_mem = tau_mem
 
         super().__init__(
             threshold=threshold,
@@ -61,7 +64,7 @@ class LIF(IntegrateFireBase):
             membrane_subtract=membrane_subtract,
             window=window,
             scale_grads=scale_grads,
-            alpha=torch.exp(-dt / tau_mem).item(),
+            alpha=torch.exp(-torch.tensor(dt / tau_mem)).item(),
             membrane_reset=membrane_reset,
         )
 
@@ -72,7 +75,10 @@ class LIF(IntegrateFireBase):
     @property
     def _param_dict(self) -> dict:
         param_dict = super()._param_dict()
+        param_dict.pop("alpha")
         param_dict.update(tau_mem=self.tau_mem, dt=self.dt)
+
+        return param_dict
 
 
 # Class to accept data with batch and time dimensions combined

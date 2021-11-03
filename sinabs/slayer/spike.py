@@ -251,7 +251,17 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             ctx.alpha,
         )
 
-        return ctx.scale_rho * grad_input, None, None, None, None, None, None, None
+        return (
+            ctx.scale_rho * grad_input,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
 
 
 spikeFunction = SpikeFunction().apply
