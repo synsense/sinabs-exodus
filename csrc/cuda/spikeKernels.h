@@ -335,7 +335,7 @@ __global__ void fullGradsKernel(
 	// Index at which input-gradient is to be calculated
 	unsigned inputGradID = i + linearRowID;
 
-	// Accumulate product of past (1 - surr * membrSubtract) * notClipped terms
+	// Accumulate product of past (alpha - surr * membrSubtract) * notClipped terms
 	float accGrad = notClipped[inputGradID];
 
 	// First summand of input gradient is surrogate gradient * output gradient * notClipped

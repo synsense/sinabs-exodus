@@ -1,15 +1,13 @@
 from typing import Optional
 
-from sinabs.slayer.kernels import heaviside_kernel
-from sinabs.slayer.spike import spikeFunctionIterForward
 from sinabs.layers.pack_dims import squeeze_class
-from sinabs.slayer.layers import SpikingLayer
+from sinabs.slayer.layers import IntegrateFireBase
 
 
 __all__ = ["IAF", "IAFSqueeze"]
 
 
-class IAF(SpikingLayer):
+class IAF(IntegrateFireBase):
     def __init__(
         self,
         threshold: float = 1.0,
@@ -22,7 +20,7 @@ class IAF(SpikingLayer):
         **kwargs,
     ):
         """
-        Pytorch implementation of a spiking, non-leaky, IAF neuron with learning enabled.
+        Slayer implementation of a spiking, non-leaky, IAF neuron with learning enabled.
 
         Parameters:
         -----------
@@ -41,103 +39,15 @@ class IAF(SpikingLayer):
             Currently not supported.
         """
 
-        if membrane_reset:
-            raise NotImplementedError("Membrane reset not implemented for this layer.")
-
         super().__init__(
             threshold=threshold,
             threshold_low=threshold_low,
+            membrane_subtract=membrane_subtract,
             window=window,
             scale_grads=scale_grads,
-            membrane_subtract=membrane_subtract,
+            alpha=1.0,
             membrane_reset=membrane_reset,
         )
-
-    def spike_function(self, spike_input):
-        """
-        Generate membrane potential and output spikes from membrane potential.
-
-        Parameters
-        ----------
-        spike_input : torch.tensor
-            Input spikes. Expected shape: (batches x neurons, time)
-            Has to be contiguous.
-
-        Returns:
-        --------
-        torch.tensor
-            Membrane potential. Same shape as `spike_input`
-        torch.tensor
-            Output spikes. Same shape as `spike_input`
-        """
-        return spikeFunctionIterForward(
-            spike_input,
-            self.membrane_subtract,
-            1.0,
-            self.state.flatten(),
-            self.activations.flatten(),
-            self.threshold,
-            self.threshold_low,
-            self.window_abs,
-            self.scale_grads,
-        )
-
-    def _update_neuron_states(
-        self, vmem: "torch.tensor", output_spikes: "torch.tensor"
-    ):
-        """
-        Update neuron states based on membrane potential and output spikes of
-        last evolution.
-
-        Parameters
-        ----------
-        vmem : torch.tensor
-            Membrane potential of last evolution. Shape: (batches, num_timesteps, *neurons)
-        output_spikes : torch.tensor
-            Output spikes of last evolution. Shape: (batches, num_timesteps, *neurons)
-        """
-
-        self.state = vmem[:, -1].clone()
-        self.activations = output_spikes[:, -1].clone()
-
-    def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
-        """
-        Generate membrane potential and resulting output spike train based on
-        spiking input. Membrane potential will be stored as `self.vmem`.
-
-        Parameters
-        ----------
-        spike_input: torch.tensor
-            Spike input raster. May take non-binary integer values.
-            Expected shape: (n_batches, num_timesteps, ...)
-
-        Returns
-        -------
-        torch.tensor
-            Output spikes. Same shape as `spike_input`.
-        """
-
-        n_batches, num_timesteps, *n_neurons = spike_input.shape
-
-        if not hasattr(self, "state") or self.state.shape != (n_batches, *n_neurons):
-            self.reset_states(shape=(n_batches, *n_neurons), randomize=False)
-
-        # Move time to last dimension -> (n_batches, *neuron_shape, num_timesteps)
-        spike_input = spike_input.movedim(1, -1)
-        # Flatten out all dimensions that can be processed in parallel and ensure contiguity
-        spike_input = spike_input.reshape(-1, num_timesteps)
-        # -> (n_parallel, num_timesteps)
-
-        output_spikes, states = self.spike_function(spike_input)
-
-        # Reshape output spikes and vmem, store states in vmem
-        output_spikes = self._post_spike_processing(
-            states, output_spikes, n_batches, n_neurons
-        )
-
-        self._update_neuron_states(self.vmem, output_spikes)
-
-        return output_spikes
 
 
 # Class to accept data with batch and time dimensions combined
