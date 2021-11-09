@@ -80,6 +80,11 @@ class LIF(IntegrateFireBase):
 
         return param_dict
 
+    def forward(self, inp):
+        # inp_rescaled = (1. - self.alpha) * inp
+        inp_rescaled = inp
+        return super().forward(inp_rescaled)
+
 
 # Class to accept data with batch and time dimensions combined
 LIFSqueeze = squeeze_class(LIF)

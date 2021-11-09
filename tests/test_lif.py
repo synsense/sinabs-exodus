@@ -1,5 +1,8 @@
 import pytest
 
+atol = 1e-7
+rtol = 1e-4
+
 
 def test_lif_inference():
     import torch
@@ -51,25 +54,22 @@ def test_lif_inference():
 
 
 def build_sinabs_model(
-    tau_mem,
-    n_channels=16,
-    n_classes=10,
-    batch_size=1,
-    threshold=1.0,
-    threshold_low=None,
+    tau_mem, n_channels=16, n_classes=10, threshold=1.0, threshold_low=None
 ):
     import torch.nn as nn
-    from sinabs.layers.cpp.lif_bptt import SpikingLayer
+    import torch
+    from sinabs.layers.lif import LIF
 
     class TestModel(nn.Module):
         def __init__(self):
+            alpha_mem = torch.exp(torch.tensor(-1 / tau_mem))
             super().__init__()
-            self.lin1 = nn.Linear(n_channels, 2 * 16, bias=False)
-            self.spk1 = SpikingLayer(tau_mem, threshold, threshold_low=threshold_low)
-            self.lin2 = nn.Linear(16, 64, bias=False)
-            self.spk2 = SpikingLayer(tau_mem, threshold, threshold_low=threshold_low)
+            self.lin1 = nn.Linear(n_channels, 16, bias=False)
+            self.spk1 = LIF(alpha_mem, threshold, threshold_low=threshold_low)
+            self.lin2 = nn.Linear(16, 32, bias=False)
+            self.spk2 = LIF(alpha_mem, threshold, threshold_low=threshold_low)
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = SpikingLayer(tau_mem, threshold, threshold_low=threshold_low)
+            self.spk3 = LIF(alpha_mem, threshold, threshold_low=threshold_low)
 
         def forward(self, data):
             out = self.lin1(data)
@@ -78,15 +78,27 @@ def build_sinabs_model(
             out = self.spk2(out)
             out = self.lin3(out)
             out = self.spk3(out)
+
             return out
+
+        def reset_states(self):
+            for lyr in self.spiking_layers:
+                lyr.reset_states()
+
+        def zero_grad(self):
+            for lyr in self.spiking_layers:
+                lyr.zero_grad()
+
+        @property
+        def spiking_layers(self):
+            return [self.spk1, self.spk2, self.spk3]
 
     return TestModel()
 
 
-@pytest.mark.skip("sinabs-cpp not stable")
+# @pytest.mark.skip("sinabs-cpp not stable")
 def test_sinabs_model():
     import torch
-    import numpy as np
 
     num_timesteps = 100
     n_channels = 16
@@ -94,10 +106,9 @@ def test_sinabs_model():
     n_classes = 10
     device = "cuda:0"
     tau_mem = 10
-    tau_syn = np.array([5.0, 15.0])
-    model = build_sinabs_model(
-        tau_mem, tau_syn, n_channels=n_channels, n_classes=n_classes, batch_size=1
-    ).to(device)
+    model = build_sinabs_model(tau_mem, n_channels=n_channels, n_classes=n_classes).to(
+        device
+    )
     input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
     out = model(input_data)
     assert out.shape == (batch_size, num_timesteps, n_classes)
@@ -105,8 +116,6 @@ def test_sinabs_model():
 
 def build_slayer_model(
     tau_mem,
-    num_timesteps=None,
-    batch_size=None,
     n_channels=16,
     n_classes=10,
     scale_grads=1.0,
@@ -121,8 +130,6 @@ def build_slayer_model(
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
             self.spk1 = LIF(
-                num_timesteps=num_timesteps,
-                batch_size=batch_size,
                 tau_mem=tau_mem,
                 threshold=threshold,
                 threshold_low=threshold_low,
@@ -131,8 +138,6 @@ def build_slayer_model(
 
             self.lin2 = nn.Linear(16, 32, bias=False)
             self.spk2 = LIF(
-                num_timesteps=num_timesteps,
-                batch_size=batch_size,
                 tau_mem=tau_mem,
                 threshold=threshold,
                 threshold_low=threshold_low,
@@ -141,8 +146,6 @@ def build_slayer_model(
 
             self.lin3 = nn.Linear(32, n_classes, bias=False)
             self.spk3 = LIF(
-                num_timesteps=num_timesteps,
-                batch_size=batch_size,
                 tau_mem=tau_mem,
                 threshold=threshold,
                 threshold_low=threshold_low,
@@ -159,6 +162,18 @@ def build_slayer_model(
             out = self.spk3(out)
             return out
 
+        def reset_states(self):
+            for lyr in self.spiking_layers:
+                lyr.reset_states()
+
+        def zero_grad(self):
+            for lyr in self.spiking_layers:
+                lyr.zero_grad()
+
+        @property
+        def spiking_layers(self):
+            return [self.spk1, self.spk2, self.spk3]
+
     return TestModel()
 
 
@@ -172,10 +187,7 @@ def test_slayer_model():
     device = "cuda:0"
     tau_mem = 10
     model = build_slayer_model(
-        tau_mem=tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        num_timesteps=num_timesteps,
+        tau_mem=tau_mem, n_channels=n_channels, n_classes=n_classes
     ).to(device)
     input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
 
@@ -193,10 +205,7 @@ def test_slayer_model_batch():
     device = "cuda:0"
     tau_mem = 10
     model = build_slayer_model(
-        tau_mem=tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        batch_size=batch_size,
+        tau_mem=tau_mem, n_channels=n_channels, n_classes=n_classes
     ).to(device)
     input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
 
@@ -215,11 +224,7 @@ def test_gradient_scaling():
     device = "cuda:0"
     tau_mem = 10
     model = build_slayer_model(
-        tau_mem=tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        num_timesteps=num_timesteps,
-        scale_grads=1.0,
+        tau_mem=tau_mem, n_channels=n_channels, n_classes=n_classes, scale_grads=1.0
     ).to(device)
     initial_weights = [p.data.clone() for p in model.parameters()]
     input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
@@ -233,11 +238,7 @@ def test_gradient_scaling():
 
     # Generate identical model, except for gradient scaling
     model_new = build_slayer_model(
-        tau_mem=tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        num_timesteps=num_timesteps,
-        scale_grads=0.1,
+        tau_mem=tau_mem, n_channels=n_channels, n_classes=n_classes, scale_grads=0.1
     ).to(device)
     for p_new, p_old in zip(model_new.parameters(), initial_weights):
         p_new.data = p_old.clone()
@@ -260,7 +261,6 @@ def test_gradient_scaling():
     assert grad_ratio_new < 0.5 * grad_ratio
 
 
-@pytest.mark.skip("sinabs-cpp not stable")
 def test_slayer_vs_sinabs_compare():
     import torch
     import time
@@ -269,61 +269,96 @@ def test_slayer_vs_sinabs_compare():
     n_channels = 16
     batch_size = 100
     n_classes = 10
+    tau_mem = 10
     device = "cuda:0"
 
-    tau_mem = 50.0
     # Define inputs
     input_data = (
-        (torch.rand((batch_size, num_timesteps, n_channels)) > 0.95).float().to(device)
+        (torch.rand((num_timesteps * batch_size, n_channels)) > 0.95).float().to(device)
     )
 
     # Define models
     slayer_model = build_slayer_model(
-        tau_mem, n_channels=n_channels, n_classes=n_classes, num_timesteps=num_timesteps
+        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem
     ).to(device)
     sinabs_model = build_sinabs_model(
-        tau_mem, n_channels=n_channels, n_classes=n_classes, num_timesteps=num_timesteps
+        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem
     ).to(device)
 
     def scale_all_weights_by_x(model, x):
         for param in model.parameters():
             param.data = param.data * x
 
-    scale_all_weights_by_x(sinabs_model, 0.02)
+    scale_all_weights_by_x(sinabs_model, 5.0)
 
     # Copy parameters
     slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
     slayer_model.lin2.weight.data = sinabs_model.lin2.weight.data.clone()
     slayer_model.lin3.weight.data = sinabs_model.lin3.weight.data.clone()
 
-    t_start = time.time()
-    sinabs_out = sinabs_model(input_data)
-    t_stop = time.time()
-    print(f"Runtime sinabs: {t_stop - t_start}")
+    # Optimizers for comparing gradients
+    optim_slayer = torch.optim.SGD(slayer_model.parameters(), lr=1e-3)
+    optim_sinabs = torch.optim.SGD(sinabs_model.parameters(), lr=1e-3)
 
-    t_start = time.time()
-    slayer_out = slayer_model(input_data)
-    t_stop = time.time()
-    print(f"Runtime slayer: {t_stop - t_start}")
+    for i in range(3):
+        # Sinabs
+        sinabs_model.zero_grad()
+        optim_sinabs.zero_grad()
+        t_start = time.time()
+        sinabs_out = sinabs_model(input_data)
+        loss_sinabs = torch.nn.functional.mse_loss(
+            sinabs_out, torch.ones_like(sinabs_out)
+        )
+        loss_sinabs.backward()
+        grads_sinabs = [p.grad.data.clone() for p in sinabs_model.parameters()]
+        optim_sinabs.step()
 
-    print("Sinabs model: ", sinabs_out.sum())
-    print("Slayer model: ", slayer_out.sum())
-    print(slayer_out)
+        t_stop = time.time()
+        print(f"Runtime sinabs: {t_stop - t_start}")
+        print("Sinabs model: ", sinabs_out.sum())
 
-    print(sinabs_model.spk1.vmem_rec.shape)
-    print(slayer_model.spk1.vmem.shape)
+        # Slayer
+        slayer_model.zero_grad()
+        optim_slayer.zero_grad()
+        t_start = time.time()
+        slayer_out = slayer_model(input_data)
+        loss_slayer = torch.nn.functional.mse_loss(
+            slayer_out, torch.ones_like(slayer_out)
+        )
+        loss_slayer.backward()
+        grads_slayer = [p.grad.data.clone() for p in slayer_model.parameters()]
+        optim_slayer.step()
+        t_stop = time.time()
+        print(f"Runtime slayer: {t_stop - t_start}")
+        print("Slayer model: ", slayer_out.sum())
+        # print(slayer_out)
 
-    # Plot data
-    # import matplotlib.pyplot as plt
-    # plt.plot(sinabs_model.spk1.vmem_rec[:, 0, 0].detach().cpu(), label="sinabs")
-    # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
-    # plt.legend()
-    # plt.show()
+        ## Plot data
+        # import matplotlib.pyplot as plt
+        # plt.plot(sinabs_model.spk1.record[:, 0, 0].detach().cpu(), label="sinabs")
+        # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
+        # plt.legend()
+        # plt.show()
+        # plt.figure()
+        # plt.scatter(*np.where(sinabs_out.cpu().detach().numpy()), marker=".")
+        # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
+        # plt.show()
 
-    assert abs(sinabs_out.sum() - slayer_out.sum()) <= 10 * sinabs_out.sum() / 100.0
+        # assert all(
+        #     torch.allclose(l_sin.state, l_slyr.state)
+        #     for (l_sin, l_slyr) in zip(
+        #         slayer_model.spiking_layers, sinabs_model.spiking_layers
+        #     )
+        # )
+        assert (sinabs_out == slayer_out).all()
+
+        # Compare gradients
+        assert all(
+            torch.allclose(g0, g1, atol=atol, rtol=rtol)
+            for g0, g1 in zip(grads_sinabs, grads_slayer)
+        )
 
 
-@pytest.mark.skip("sinabs-cpp not stable")
 def test_slayer_vs_sinabs_compare_thr_low():
     import torch
     import time
@@ -332,81 +367,179 @@ def test_slayer_vs_sinabs_compare_thr_low():
     n_channels = 16
     batch_size = 100
     n_classes = 10
+    tau_mem = 10
     device = "cuda:0"
-    threshold = 0.7
-    threshold_low = -0.3
 
-    tau_mem = 50.0
     # Define inputs
     input_data = (
-        (torch.rand((batch_size, num_timesteps, n_channels)) > 0.95).float().to(device)
+        (torch.rand((num_timesteps * batch_size, n_channels)) > 0.95).float().to(device)
     )
 
     # Define models
     slayer_model = build_slayer_model(
-        tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        num_timesteps=num_timesteps,
-        threshold=threshold,
-        threshold_low=threshold_low,
-    ).to(device)
-    slayer_model_nothrlow = build_slayer_model(
-        tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        num_timesteps=num_timesteps,
-        threshold=threshold,
+        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem, threshold_low=-1
     ).to(device)
     sinabs_model = build_sinabs_model(
-        tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        num_timesteps=num_timesteps,
-        threshold=threshold,
+        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem, threshold_low=-1
     ).to(device)
-
-    def scale_all_weights_by_x(model, x):
-        for param in model.parameters():
-            param.data = param.data * x
-
-    scale_all_weights_by_x(sinabs_model, 0.02)
 
     # Copy parameters
     slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
     slayer_model.lin2.weight.data = sinabs_model.lin2.weight.data.clone()
     slayer_model.lin3.weight.data = sinabs_model.lin3.weight.data.clone()
 
-    t_start = time.time()
-    sinabs_out = sinabs_model(input_data)
-    t_stop = time.time()
-    print(f"Runtime sinabs: {t_stop - t_start}")
+    # Optimizers for comparing gradients
+    optim_slayer = torch.optim.SGD(slayer_model.parameters(), lr=1e-3)
+    optim_sinabs = torch.optim.SGD(sinabs_model.parameters(), lr=1e-3)
 
-    t_start = time.time()
-    slayer_out = slayer_model(input_data)
-    t_stop = time.time()
-    print(f"Runtime slayer: {t_stop - t_start}")
+    for i in range(3):
+        # Sinabs
+        sinabs_model.zero_grad()
+        optim_sinabs.zero_grad()
+        t_start = time.time()
+        sinabs_out = sinabs_model(input_data.view((-1, n_channels)))
+        loss_sinabs = torch.nn.functional.mse_loss(
+            sinabs_out, torch.ones_like(sinabs_out)
+        )
+        loss_sinabs.backward()
+        grads_sinabs = [p.grad.data.clone() for p in sinabs_model.parameters()]
+        optim_sinabs.step()
 
-    t_start = time.time()
-    slayer_out_nothrlow = slayer_model_nothrlow(input_data)
-    t_stop = time.time()
-    print(f"Runtime slayer, no lower threshold: {t_stop - t_start}")
+        t_stop = time.time()
+        print(f"Runtime sinabs: {t_stop - t_start}")
+        print("Sinabs model: ", sinabs_out.sum())
 
-    print("Sinabs model: ", sinabs_out.sum())
-    print("Slayer model: ", slayer_out.sum())
-    print("Slayer model, no lower threshold: ", slayer_out_nothrlow.sum())
-    print(slayer_out)
+        # Slayer
+        slayer_model.zero_grad()
+        optim_slayer.zero_grad()
+        t_start = time.time()
+        slayer_out = slayer_model(input_data)
+        loss_slayer = torch.nn.functional.mse_loss(
+            slayer_out, torch.ones_like(slayer_out)
+        )
+        loss_slayer.backward()
+        grads_slayer = [p.grad.data.clone() for p in slayer_model.parameters()]
+        optim_slayer.step()
+        t_stop = time.time()
+        print(f"Runtime slayer: {t_stop - t_start}")
 
-    print(sinabs_model.spk1.vmem_rec.shape)
-    print(slayer_model.spk1.vmem.shape)
+        print("Slayer model: ", slayer_out.sum())
+        # print(slayer_out)
 
-    # Plot data
-    # import matplotlib.pyplot as plt
-    # plt.plot(sinabs_model.spk1.vmem_rec[:, 0, 0].detach().cpu(), label="sinabs")
-    # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
-    # plt.legend()
-    # plt.show()
+        ## Plot data
+        # import matplotlib.pyplot as plt
+        # plt.plot(sinabs_model.spk1.record[:, 0, 0].detach().cpu(), label="sinabs")
+        # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
+        # plt.legend()
+        # plt.show()
+        # plt.figure()
+        # plt.scatter(*np.where(sinabs_out.cpu().detach().numpy()), marker=".")
+        # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
+        # plt.show()
 
-    assert abs(sinabs_out.sum() - slayer_out.sum()) <= 10 * sinabs_out.sum() / 100.0
-    # Make sure there is actually a difference from adding the lower threshold
-    assert (torch.abs(slayer_out_nothrlow - slayer_out) > 1e-3).any()
+        assert all(
+            torch.allclose(l_sin.state, l_slyr.state)
+            for (l_sin, l_slyr) in zip(
+                slayer_model.spiking_layers, sinabs_model.spiking_layers
+            )
+        )
+        assert (sinabs_out == slayer_out).all()
+
+        # Compare gradients
+        assert all(
+            torch.allclose(g0, g1, atol=atol, rtol=rtol)
+            for g0, g1 in zip(grads_sinabs, grads_slayer)
+        )
+
+
+def test_slayer_vs_sinabs_compare_thr_low_reset():
+    import torch
+    import time
+
+    num_timesteps = 500
+    n_channels = 16
+    batch_size = 100
+    n_classes = 10
+    tau_mem = 10
+    device = "cuda:0"
+
+    # Define inputs
+    input_data = (
+        (torch.rand((num_timesteps * batch_size, n_channels)) > 0.95).float().to(device)
+    )
+
+    # Define models
+    slayer_model = build_slayer_model(
+        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem, threshold_low=-1
+    ).to(device)
+    sinabs_model = build_sinabs_model(
+        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem, threshold_low=-1
+    ).to(device)
+
+    # Copy parameters
+    slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
+    slayer_model.lin2.weight.data = sinabs_model.lin2.weight.data.clone()
+    slayer_model.lin3.weight.data = sinabs_model.lin3.weight.data.clone()
+
+    # Optimizers for comparing gradients
+    optim_slayer = torch.optim.SGD(slayer_model.parameters(), lr=1e-3)
+    optim_sinabs = torch.optim.SGD(sinabs_model.parameters(), lr=1e-3)
+
+    for i in range(3):
+        # Sinabs
+        sinabs_model.reset_states()
+        optim_sinabs.zero_grad()
+        t_start = time.time()
+        sinabs_out = sinabs_model(input_data.view((-1, n_channels)))
+        loss_sinabs = torch.nn.functional.mse_loss(
+            sinabs_out, torch.ones_like(sinabs_out)
+        )
+        loss_sinabs.backward()
+        grads_sinabs = [p.grad.data.clone() for p in sinabs_model.parameters()]
+        optim_sinabs.step()
+
+        t_stop = time.time()
+        print(f"Runtime sinabs: {t_stop - t_start}")
+        print("Sinabs model: ", sinabs_out.sum())
+
+        # Slayer
+        slayer_model.reset_states()
+        optim_slayer.zero_grad()
+        t_start = time.time()
+        slayer_out = slayer_model(input_data)
+        loss_slayer = torch.nn.functional.mse_loss(
+            slayer_out, torch.ones_like(slayer_out)
+        )
+        loss_slayer.backward()
+        grads_slayer = [p.grad.data.clone() for p in slayer_model.parameters()]
+        optim_slayer.step()
+        t_stop = time.time()
+        print(f"Runtime slayer: {t_stop - t_start}")
+
+        print("Slayer model: ", slayer_out.sum())
+        # print(slayer_out)
+
+        ## Plot data
+        # import matplotlib.pyplot as plt
+        # plt.plot(sinabs_model.spk1.record[:, 0, 0].detach().cpu(), label="sinabs")
+        # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
+        # plt.legend()
+        # plt.show()
+        # plt.figure()
+        # plt.scatter(*np.where(sinabs_out.cpu().detach().numpy()), marker=".")
+        # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
+        # plt.show()
+
+        assert all(
+            torch.allclose(l_sin.state, l_slyr.state)
+            for (l_sin, l_slyr) in zip(
+                slayer_model.spiking_layers, sinabs_model.spiking_layers
+            )
+        )
+        assert (sinabs_out == slayer_out).all()
+
+        # Compare gradients
+        assert all(
+            torch.allclose(g0, g1, atol=atol, rtol=rtol)
+            for g0, g1 in zip(grads_sinabs, grads_slayer)
+        )
