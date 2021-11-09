@@ -81,8 +81,7 @@ class LIF(IntegrateFireBase):
         return param_dict
 
     def forward(self, inp):
-        # inp_rescaled = (1. - self.alpha) * inp
-        inp_rescaled = inp
+        inp_rescaled = (1.0 - self.alpha) * inp
         return super().forward(inp_rescaled)
 
 
