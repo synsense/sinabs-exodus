@@ -224,10 +224,17 @@ def test_gradient_scaling():
     device = "cuda:0"
     tau_mem = 10
     model = build_slayer_model(
-        tau_mem=tau_mem, n_channels=n_channels, n_classes=n_classes, scale_grads=1.0
+        tau_mem=tau_mem,
+        n_channels=n_channels,
+        n_classes=n_classes,
+        scale_grads=1.0,
+        threshold=0.01,
     ).to(device)
     initial_weights = [p.data.clone() for p in model.parameters()]
-    input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
+
+    input_data = (
+        (torch.rand((batch_size, num_timesteps, n_channels)) > 0.9).float().to(device)
+    )
 
     out = model(input_data).cpu()
     loss = torch.nn.functional.mse_loss(out, torch.ones_like(out))
@@ -238,7 +245,11 @@ def test_gradient_scaling():
 
     # Generate identical model, except for gradient scaling
     model_new = build_slayer_model(
-        tau_mem=tau_mem, n_channels=n_channels, n_classes=n_classes, scale_grads=0.1
+        tau_mem=tau_mem,
+        n_channels=n_channels,
+        n_classes=n_classes,
+        scale_grads=0.1,
+        threshold=0.01,
     ).to(device)
     for p_new, p_old in zip(model_new.parameters(), initial_weights):
         p_new.data = p_old.clone()
@@ -377,10 +388,18 @@ def test_slayer_vs_sinabs_compare_thr_low():
 
     # Define models
     slayer_model = build_slayer_model(
-        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem, threshold_low=-1
+        n_channels=n_channels,
+        n_classes=n_classes,
+        tau_mem=tau_mem,
+        threshold_low=-0.2,
+        threshold=0.2,
     ).to(device)
     sinabs_model = build_sinabs_model(
-        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem, threshold_low=-1
+        n_channels=n_channels,
+        n_classes=n_classes,
+        tau_mem=tau_mem,
+        threshold_low=-0.2,
+        threshold=0.2,
     ).to(device)
 
     # Copy parameters
@@ -470,10 +489,18 @@ def test_slayer_vs_sinabs_compare_thr_low_reset():
 
     # Define models
     slayer_model = build_slayer_model(
-        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem, threshold_low=-1
+        n_channels=n_channels,
+        n_classes=n_classes,
+        tau_mem=tau_mem,
+        threshold_low=-0.2,
+        threshold=0.2,
     ).to(device)
     sinabs_model = build_sinabs_model(
-        n_channels=n_channels, n_classes=n_classes, tau_mem=tau_mem, threshold_low=-1
+        n_channels=n_channels,
+        n_classes=n_classes,
+        tau_mem=tau_mem,
+        threshold_low=-0.2,
+        threshold=0.2,
     ).to(device)
 
     # Copy parameters
