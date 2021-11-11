@@ -1,8 +1,8 @@
 from typing import Optional
 
 from sinabs.layers.pack_dims import squeeze_class
+from sinabs.layers import IAF as IAFSinabs
 from sinabs.slayer.layers import IntegrateFireBase
-
 
 __all__ = ["IAF", "IAFSqueeze"]
 
@@ -48,14 +48,14 @@ class IAF(IntegrateFireBase):
             membrane_subtract=membrane_subtract,
             window=window,
             scale_grads=scale_grads,
-            alpha=1.0,
+            alpha_mem=1.0,
             membrane_reset=membrane_reset,
         )
 
     @property
     def _param_dict(self) -> dict:
-        param_dict = super()._param_dict()
-        param_dict.pop("alpha")
+        param_dict = super()._param_dict
+        param_dict.pop("alpha_mem")
 
         return param_dict
 

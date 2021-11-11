@@ -2,7 +2,7 @@ from typing import Optional, Tuple
 
 import torch
 
-from sinabs.slayer.spike import spikeFunctionIterForward
+from sinabs.slayer.spike import SpikeFunctionIterForward
 from sinabs.layers import SpikingLayer
 
 
@@ -22,7 +22,7 @@ class IntegrateFireBase(SpikingLayer):
         membrane_subtract: Optional[float] = None,
         window: float = 1.0,
         scale_grads: float = 1.0,
-        alpha: float = 1.0,
+        alpha_mem: float = 1.0,
         record: bool = True,
         membrane_reset=False,
         *args,
@@ -46,7 +46,7 @@ class IntegrateFireBase(SpikingLayer):
             (Relative to size of threshold)
         scale_grads: float
             Scale surrogate gradients in backpropagation.
-        alpha: float
+        alpha_mem: float
             Neuron state is multiplied by this factor at each timestep. For IAF dynamics
             set to 1, for LIF to exp(-dt/tau).
         record: bool
@@ -57,8 +57,8 @@ class IntegrateFireBase(SpikingLayer):
 
         if membrane_reset:
             raise NotImplementedError("Membrane reset not implemented for this layer.")
-        if not (0 < alpha <= 1.0):
-            raise ValueError("`alpha` must be between 0 and 1.")
+        if not (0 < alpha_mem <= 1.0):
+            raise ValueError("`alpha_mem` must be between 0 and 1.")
 
         super().__init__(
             *args,
@@ -72,7 +72,7 @@ class IntegrateFireBase(SpikingLayer):
         # - Store hyperparameters
         self.scale_grads = scale_grads
         self.window_abs = window * threshold
-        self.alpha = alpha
+        self.alpha_mem = alpha_mem
         self.record = record
 
     def spike_function(self, inp: "torch.tensor") -> "torch.tensor":
@@ -98,10 +98,10 @@ class IntegrateFireBase(SpikingLayer):
         # have effect on the original `vmem`.
 
         # Generate output_spikes
-        return spikeFunctionIterForward(
+        return SpikeFunctionIterForward.apply(
             inp,
             self.membrane_subtract,
-            self.alpha,
+            self.alpha_mem,
             self.state.flatten(),
             self.activations.flatten(),
             self.threshold,
@@ -215,11 +215,11 @@ class IntegrateFireBase(SpikingLayer):
 
     @property
     def _param_dict(self) -> dict:
-        param_dict = super()._param_dict()
+        param_dict = super()._param_dict
         param_dict.update(
             scale_grads=self.scale_grads,
             window=self.window_abs / self.threshold,
-            alpha=self.alpha,
+            alpha_mem=self.alpha_mem,
             record=self.record,
         )
 

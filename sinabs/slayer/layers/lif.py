@@ -64,24 +64,24 @@ class LIF(IntegrateFireBase):
             membrane_subtract=membrane_subtract,
             window=window,
             scale_grads=scale_grads,
-            alpha=torch.exp(-torch.tensor(dt / tau_mem)).item(),
+            alpha_mem=torch.exp(-torch.tensor(dt / tau_mem)).item(),
             membrane_reset=membrane_reset,
         )
 
     @property
     def tau_mem(self):
-        return -self.dt / torch.log(self.alpha).item()
+        return -self.dt / torch.log(self.alpha_mem).item()
 
     @property
     def _param_dict(self) -> dict:
-        param_dict = super()._param_dict()
-        param_dict.pop("alpha")
+        param_dict = super()._param_dict
+        param_dict.pop("alpha_mem")
         param_dict.update(tau_mem=self.tau_mem, dt=self.dt)
 
         return param_dict
 
     def forward(self, inp):
-        inp_rescaled = (1.0 - self.alpha) * inp
+        inp_rescaled = (1.0 - self.alpha_mem) * inp
         return super().forward(inp_rescaled)
 
 
