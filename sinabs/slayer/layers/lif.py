@@ -16,7 +16,8 @@ class LIF(IntegrateFireBase):
         membrane_subtract: Optional[float] = None,
         window: float = 1.0,
         scale_grads: float = 1.0,
-        tau_mem: float = 10.0,
+        # tau_mem: float = 10.0,
+        alpha_mem: float = 0.9,
         dt: float = 1.0,
         record: bool = True,
         membrane_reset=False,
@@ -50,13 +51,13 @@ class LIF(IntegrateFireBase):
             Currently not supported.
         """
 
-        if dt <= 0:
-            raise ValueError("`dt` must be greater than 0.")
-        if tau_mem < dt:
-            raise ValueError("`tau_mem` must be greater than `dt`.")
+        # if dt <= 0:
+        #     raise ValueError("`dt` must be greater than 0.")
+        # if tau_mem < dt:
+        #     raise ValueError("`tau_mem` must be greater than `dt`.")
 
-        self.dt = dt
-        tau_mem = tau_mem
+        # self.dt = dt
+        # tau_mem = tau_mem
 
         super().__init__(
             threshold=threshold,
@@ -64,21 +65,21 @@ class LIF(IntegrateFireBase):
             membrane_subtract=membrane_subtract,
             window=window,
             scale_grads=scale_grads,
-            alpha_mem=torch.exp(-torch.tensor(dt / tau_mem)).item(),
+            alpha_mem=alpha_mem,  # torch.exp(-torch.tensor(dt / tau_mem)).item(),
             membrane_reset=membrane_reset,
         )
 
-    @property
-    def tau_mem(self):
-        return -self.dt / torch.log(self.alpha_mem).item()
+    # @property
+    # def tau_mem(self):
+    #     return -self.dt / torch.log(self.alpha_mem).item()
 
-    @property
-    def _param_dict(self) -> dict:
-        param_dict = super()._param_dict
-        param_dict.pop("alpha_mem")
-        param_dict.update(tau_mem=self.tau_mem, dt=self.dt)
+    # @property
+    # def _param_dict(self) -> dict:
+    #     param_dict = super()._param_dict
+    #     param_dict.pop("alpha_mem")
+    #     param_dict.update(tau_mem=self.tau_mem, dt=self.dt)
 
-        return param_dict
+    #     return param_dict
 
     def forward(self, inp):
         inp_rescaled = (1.0 - self.alpha_mem) * inp
