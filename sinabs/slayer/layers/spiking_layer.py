@@ -15,6 +15,8 @@ class IntegrateFireBase(SpikingLayer):
     learning enabled. Does not simulate synaptic dynamics.
     """
 
+    backend = "slayer"
+
     def __init__(
         self,
         threshold: float = 1.0,

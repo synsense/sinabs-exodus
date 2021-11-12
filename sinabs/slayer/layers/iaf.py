@@ -1,7 +1,6 @@
 from typing import Optional
 
 from sinabs.layers.pack_dims import squeeze_class
-from sinabs.layers import IAF as IAFSinabs
 from sinabs.slayer.layers import IntegrateFireBase
 
 __all__ = ["IAF", "IAFSqueeze"]
