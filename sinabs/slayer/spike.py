@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 import sinabsslayerCuda
 
@@ -11,7 +9,7 @@ class SpikeFunction(torch.autograd.Function):
         membr_pot: torch.tensor,
         membrane_subtract: float,
         threshold: float,
-        window: Optional[float] = None,
+        window: float = 1.0,
         scale_rho: float = 1.0,
     ):
         """
@@ -81,7 +79,7 @@ class SpikeFunctionLB(torch.autograd.Function):
         membrane_subtract: float,
         threshold: float,
         threshold_low: float,
-        window: Optional[float] = None,
+        window: float = 1.0,
         scale_rho=1.0,
     ):
         """
@@ -157,7 +155,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         activations: torch.tensor,
         threshold: float,
         threshold_low: float,
-        window: Optional[float] = None,
+        window: float = 1.0,
         scale_rho=1.0,
     ):
         """
