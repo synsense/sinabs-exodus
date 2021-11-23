@@ -363,7 +363,7 @@ def test_slayer_vs_sinabs_compare():
         # plt.show()
 
         # assert all(
-        #     torch.allclose(l_sin.state, l_slyr.state)
+        #     torch.allclose(l_sin.v_mem, l_slyr.v_mem)
         #     for (l_sin, l_slyr) in zip(
         #         slayer_model.spiking_layers, sinabs_model.spiking_layers
         #     )
@@ -464,7 +464,7 @@ def test_slayer_vs_sinabs_compare_thr_low():
         # plt.show()
 
         assert all(
-            torch.allclose(l_sin.state, l_slyr.state)
+            torch.allclose(l_sin.v_mem, l_slyr.v_mem)
             for (l_sin, l_slyr) in zip(
                 slayer_model.spiking_layers, sinabs_model.spiking_layers
             )
@@ -565,7 +565,7 @@ def test_slayer_vs_sinabs_compare_thr_low_reset():
         # plt.show()
 
         assert all(
-            torch.allclose(l_sin.state, l_slyr.state)
+            torch.allclose(l_sin.v_mem, l_slyr.v_mem)
             for (l_sin, l_slyr) in zip(
                 slayer_model.spiking_layers, sinabs_model.spiking_layers
             )

@@ -49,7 +49,7 @@ class IntegrateFireBase(SpikingLayer):
         scale_grads: float
             Scale surrogate gradients in backpropagation.
         alpha_mem: float
-            Neuron state is multiplied by this factor at each timestep. For IAF dynamics
+            Neuron v_mem is multiplied by this factor at each timestep. For IAF dynamics
             set to 1, for LIF to exp(-dt/tau).
         record: bool
             Record membrane potential and spike output during forward call.
@@ -104,7 +104,7 @@ class IntegrateFireBase(SpikingLayer):
             inp,
             self.membrane_subtract,
             self.alpha_mem,
-            self.state.flatten(),
+            self.v_mem.flatten(),
             self.activations.flatten(),
             self.threshold,
             self.threshold_low,
@@ -127,7 +127,7 @@ class IntegrateFireBase(SpikingLayer):
             Output spikes of last evolution. Shape: (batches, num_timesteps, *neurons)
         """
 
-        self.state = vmem[:, -1].clone()
+        self.v_mem = vmem[:, -1].clone()
         self.activations = output_spikes[:, -1].clone()
 
     def _post_spike_processing(
@@ -197,7 +197,7 @@ class IntegrateFireBase(SpikingLayer):
 
         n_batches, num_timesteps, *n_neurons = spike_input.shape
 
-        if not hasattr(self, "state") or self.state.shape != (n_batches, *n_neurons):
+        if not hasattr(self, "v_mem") or self.v_mem.shape != (n_batches, *n_neurons):
             self.reset_states(shape=(n_batches, *n_neurons), randomize=False)
 
         # Move time to last dimension -> (n_batches, *neuron_shape, num_timesteps)
