@@ -6,7 +6,7 @@ from sinabs.slayer.spike import SpikeFunctionIterForward
 from sinabs.layers import SpikingLayer
 
 
-__all__ = ["SpikingLayer"]
+__all__ = ["IntegrateFireBase"]
 
 
 class IntegrateFireBase(SpikingLayer):
