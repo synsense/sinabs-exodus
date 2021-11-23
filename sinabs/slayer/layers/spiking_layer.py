@@ -95,9 +95,9 @@ class IntegrateFireBase(SpikingLayer):
             Output spikes. Same shape as `spike_input`
         """
 
-        # Note: Do not make `vmem` contiguous only here because a new object will
+        # Note: Do not make `inp` contiguous only here because a new object will
         # be created, so that any modifications (membrane reset etc.) would not
-        # have effect on the original `vmem`.
+        # have effect on the original `inp`.
 
         # Generate output_spikes
         return SpikeFunctionIterForward.apply(
@@ -113,7 +113,7 @@ class IntegrateFireBase(SpikingLayer):
         )
 
     def _update_neuron_states(
-        self, vmem: "torch.tensor", output_spikes: "torch.tensor"
+        self, v_mem_full: "torch.tensor", output_spikes: "torch.tensor"
     ):
         """
         Update neuron states based on membrane potential and output spikes of
@@ -121,34 +121,36 @@ class IntegrateFireBase(SpikingLayer):
 
         Parameters
         ----------
-        vmem : torch.tensor
+        v_mem_full : torch.tensor
             Membrane potential of last evolution. Shape: (batches, num_timesteps, *neurons)
         output_spikes : torch.tensor
             Output spikes of last evolution. Shape: (batches, num_timesteps, *neurons)
         """
 
-        self.v_mem = vmem[:, -1].clone()
+        self.v_mem = v_mem_full[:, -1].clone()
         self.activations = output_spikes[:, -1].clone()
+        self.tw = v_mem_full.shape[1]
+        self.spikes_number = output_spikes.sum()
 
     def _post_spike_processing(
         self,
-        vmem: "torch.tensor",
+        v_mem_full: "torch.tensor",
         output_spikes: "torch.tensor",
         n_batches: int,
         n_neurons: Tuple[int],
     ) -> "torch.tensor":
         """
         Handle post-processing after spikes have been generated: Reshape output spikes,
-        reshape and record vmem, record output spike statistics. Update neuron states.
+        reshape and record v_mem_full, record output spike statistics. Update neuron states.
 
         Parameters
         ----------
-        vmem : torch.tensor
+        v_mem_full : torch.tensor
             Membrane potential. Expected shape: (batches x neurons, time)
         output_spikes : torch.tensor
             Output spikes. Expected shape: (batches x neurons, time)
         n_batches : int
-            Number of batches. Needed for correct reshaping of output and vmem
+            Number of batches. Needed for correct reshaping of output and v_mem_full
         n_neurons : Tuple of ints
             Remaining neuron dimensions (e.g. channels, height, width). Determines output
             shape after batch and time dimensions.
@@ -160,28 +162,26 @@ class IntegrateFireBase(SpikingLayer):
         """
 
         # Separate batch and neuron dimensions -> (batches, *neurons, time)
-        vmem = vmem.reshape(n_batches, *n_neurons, -1)
+        v_mem_full = v_mem_full.reshape(n_batches, *n_neurons, -1)
         output_spikes = output_spikes.reshape(n_batches, *n_neurons, -1)
 
         # Move time dimension to second -> (batches, time, *neurons)
-        vmem = vmem.movedim(-1, 1)
+        v_mem_full = v_mem_full.movedim(-1, 1)
         output_spikes = output_spikes.movedim(-1, 1)
 
         if self.record:
             # Record states and output
-            self.vmem = vmem
+            self.v_mem_recorded = v_mem_full
             self.spikes_out = output_spikes
 
-        self.spikes_number = output_spikes.sum()
-
-        self._update_neuron_states(vmem, output_spikes)
+        self._update_neuron_states(v_mem_full, output_spikes)
 
         return output_spikes
 
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
         Generate membrane potential and resulting output spike train based on
-        spiking input. Membrane potential will be stored as `self.vmem`.
+        spiking input. Membrane potential will be stored as `self.v_mem_recorded`.
 
         Parameters
         ----------
@@ -206,11 +206,11 @@ class IntegrateFireBase(SpikingLayer):
         spike_input = spike_input.reshape(-1, num_timesteps)
         # -> (n_parallel, num_timesteps)
 
-        output_spikes, states = self.spike_function(spike_input)
+        output_spikes, v_mem_full = self.spike_function(spike_input)
 
-        # Reshape output spikes and vmem, store neuron states
+        # Reshape output spikes and v_mem_full, store neuron states
         output_spikes = self._post_spike_processing(
-            states, output_spikes, n_batches, n_neurons
+            v_mem_full, output_spikes, n_batches, n_neurons
         )
 
         return output_spikes

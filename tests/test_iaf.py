@@ -34,11 +34,11 @@ def test_iaf_inference():
     output_thrlow = layer_squeeze_thr_low(input_data_squeeze)
     assert (output_thrlow != output_squeeze).any()
 
-    # # Make sure vmem is not below threshold_low for two consecutive timesteps
+    # # Make sure v_mem_recorded is not below threshold_low for two consecutive timesteps
     # # This test might fail even if the layer works correctly
-    # vmem = layer_squeeze_thr_low.vmem
+    # v_mem_recorded = layer_squeeze_thr_low.v_mem_recorded
     # assert not (
-    #     torch.logical_and(vmem[:, 1:] < threshold_low, vmem[:, :-1] < threshold_low)
+    #     torch.logical_and(v_mem_recorded[:, 1:] < threshold_low, v_mem_recorded[:, :-1] < threshold_low)
     # ).any()
 
 
@@ -334,7 +334,7 @@ def test_slayer_vs_sinabs_compare():
         ## Plot data
         # import matplotlib.pyplot as plt
         # plt.plot(sinabs_model.spk1.record[:, 0, 0].detach().cpu(), label="sinabs")
-        # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
+        # plt.plot(slayer_model.spk1.v_mem_recorded[0, 0, 0, 0].detach().cpu(), label="Slayer")
         # plt.legend()
         # plt.show()
         # plt.figure()
@@ -429,7 +429,7 @@ def test_slayer_vs_sinabs_compare_thr_low():
         ## Plot data
         # import matplotlib.pyplot as plt
         # plt.plot(sinabs_model.spk1.record[:, 0, 0].detach().cpu(), label="sinabs")
-        # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
+        # plt.plot(slayer_model.spk1.v_mem_recorded[0, 0, 0, 0].detach().cpu(), label="Slayer")
         # plt.legend()
         # plt.show()
         # plt.figure()
@@ -524,7 +524,7 @@ def test_slayer_vs_sinabs_compare_thr_low_reset():
         ## Plot data
         # import matplotlib.pyplot as plt
         # plt.plot(sinabs_model.spk1.record[:, 0, 0].detach().cpu(), label="sinabs")
-        # plt.plot(slayer_model.spk1.vmem[0, 0, 0, 0].detach().cpu(), label="Slayer")
+        # plt.plot(slayer_model.spk1.v_mem_recorded[0, 0, 0, 0].detach().cpu(), label="Slayer")
         # plt.legend()
         # plt.show()
         # plt.figure()
