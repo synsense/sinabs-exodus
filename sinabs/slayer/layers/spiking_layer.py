@@ -49,7 +49,7 @@ class IntegrateFireBase(SpikingLayer):
         scale_grads: float
             Scale surrogate gradients in backpropagation.
         alpha_mem: float
-            Neuron v_mem is multiplied by this factor at each timestep. For IAF dynamics
+            Neuron state is multiplied by this factor at each timestep. For IAF dynamics
             set to 1, for LIF to exp(-dt/tau).
         record: bool
             Record membrane potential and spike output during forward call.
@@ -73,7 +73,7 @@ class IntegrateFireBase(SpikingLayer):
 
         # - Store hyperparameters
         self.scale_grads = scale_grads
-        self.window_abs = window * threshold
+        self.learning_window = window * threshold
         self.alpha_mem = alpha_mem
         self.record = record
 
@@ -108,7 +108,7 @@ class IntegrateFireBase(SpikingLayer):
             self.activations.flatten(),
             self.threshold,
             self.threshold_low,
-            self.window_abs,
+            self.learning_window,
             self.scale_grads,
         )
 
@@ -220,7 +220,7 @@ class IntegrateFireBase(SpikingLayer):
         param_dict = super()._param_dict
         param_dict.update(
             scale_grads=self.scale_grads,
-            window=self.window_abs / self.threshold,
+            window=self.learning_window / self.threshold,
             alpha_mem=self.alpha_mem,
             record=self.record,
         )
