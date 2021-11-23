@@ -57,20 +57,23 @@ def build_sinabs_model(
     tau_mem, n_channels=16, n_classes=10, threshold=1.0, threshold_low=None
 ):
     import torch.nn as nn
-    import torch
     from sinabs.layers.lif import LIF
-
-    alpha_mem = torch.exp(torch.tensor(-1 / tau_mem))
 
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = LIF(alpha_mem, threshold, threshold_low=threshold_low)
+            self.spk1 = LIF(
+                tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
+            )
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = LIF(alpha_mem, threshold, threshold_low=threshold_low)
+            self.spk2 = LIF(
+                tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
+            )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = LIF(alpha_mem, threshold, threshold_low=threshold_low)
+            self.spk3 = LIF(
+                tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
+            )
 
         def forward(self, data):
             out = self.lin1(data)
@@ -124,10 +127,7 @@ def build_slayer_model(
     threshold_low=None,
 ):
     import torch.nn as nn
-    import torch
     from sinabs.slayer.layers import LIF
-
-    alpha_mem = torch.exp(torch.tensor(-1 / tau_mem))
 
     class TestModel(nn.Module):
         def __init__(self):
@@ -135,7 +135,7 @@ def build_slayer_model(
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
             self.spk1 = LIF(
                 # tau_mem=tau_mem,
-                alpha_mem=alpha_mem,
+                tau_mem=tau_mem,
                 threshold=threshold,
                 threshold_low=threshold_low,
                 scale_grads=scale_grads,
@@ -144,7 +144,7 @@ def build_slayer_model(
             self.lin2 = nn.Linear(16, 32, bias=False)
             self.spk2 = LIF(
                 # tau_mem=tau_mem,
-                alpha_mem=alpha_mem,
+                tau_mem=tau_mem,
                 threshold=threshold,
                 threshold_low=threshold_low,
                 scale_grads=scale_grads,
@@ -153,7 +153,7 @@ def build_slayer_model(
             self.lin3 = nn.Linear(32, n_classes, bias=False)
             self.spk3 = LIF(
                 # tau_mem=tau_mem,
-                alpha_mem=alpha_mem,
+                tau_mem=tau_mem,
                 threshold=threshold,
                 threshold_low=threshold_low,
                 scale_grads=scale_grads,

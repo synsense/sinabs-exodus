@@ -201,8 +201,18 @@ class SpikeFunctionIterForward(torch.autograd.Function):
 
         for t in range(time_steps):
 
-            # subtract a number of membrane_subtract's as there are spikes
-            state = inp[:, t] + alpha * state - alpha * activations * membrane_subtract
+            # Subtract a number of membrane_subtract's as there are spikes
+            state = state - activations * membrane_subtract
+            # Decay state and add input.
+            state = state * alpha
+            # Add input
+            state = inp[:, t] + state
+
+            # NOTE: The state update can be written in different, mathematically
+            # equivalent forms. However, when the computational order of evaluating
+            # the different statements differs from that in sinabs, there might be
+            # small numerical differences in the computed outputs and gradients.
+
             if threshold_low is not None:
                 # ReLU for efficient implementation of lower limit
                 state = torch.nn.functional.relu(state - threshold_low) + threshold_low

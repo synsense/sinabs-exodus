@@ -11,14 +11,12 @@ __all__ = ["LIF", "LIFSqueeze"]
 class LIF(IntegrateFireBase):
     def __init__(
         self,
+        tau_mem: float,
         threshold: float = 1.0,
         threshold_low: Optional[float] = None,
         membrane_subtract: Optional[float] = None,
         window: float = 1.0,
         scale_grads: float = 1.0,
-        # tau_mem: float = 10.0,
-        alpha_mem: float = 0.9,
-        dt: float = 1.0,
         record: bool = True,
         membrane_reset=False,
         *args,
@@ -30,6 +28,8 @@ class LIF(IntegrateFireBase):
 
         Parameters:
         -----------
+        tau_mem: float
+            Membrane time constant.
         threshold: float
             Spiking threshold of the neuron.
         threshold_low: Optional[float]
@@ -39,10 +39,6 @@ class LIF(IntegrateFireBase):
             If ``None`` (default): Same as ``threshold``.
         window: float
             Distance between step of Heaviside surrogate gradient and threshold.
-        tau_mem: float
-            Membrane time constant.
-        dt: float
-            Simulation time step. Only used for calculating decay factor.
         scale_grads: float
             Scale surrogate gradients in backpropagation.
         record: bool
@@ -65,21 +61,27 @@ class LIF(IntegrateFireBase):
             membrane_subtract=membrane_subtract,
             window=window,
             scale_grads=scale_grads,
-            alpha_mem=alpha_mem,  # torch.exp(-torch.tensor(dt / tau_mem)).item(),
+            alpha_mem=torch.exp(-torch.tensor(1.0 / tau_mem)).item(),
             membrane_reset=membrane_reset,
         )
 
-    # @property
-    # def tau_mem(self):
-    #     return -self.dt / torch.log(self.alpha_mem).item()
+    @property
+    def tau_mem(self):
+        return -1.0 / torch.log(torch.tensor(self.alpha_mem)).item()
 
-    # @property
-    # def _param_dict(self) -> dict:
-    #     param_dict = super()._param_dict
-    #     param_dict.pop("alpha_mem")
-    #     param_dict.update(tau_mem=self.tau_mem, dt=self.dt)
+    @tau_mem.setter
+    def tau_mem(self, new_tau):
+        if new_tau <= 0:
+            raise ValueError("'tau_mem' must be greater than 0.")
+        self.alpha_mem = torch.exp(-torch.tensor(1.0 / new_tau)).item()
 
-    #     return param_dict
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict
+        param_dict.pop("alpha_mem")
+        param_dict.update(tau_mem=self.tau_mem)
+
+        return param_dict
 
     def forward(self, inp):
         inp_rescaled = (1.0 - self.alpha_mem) * inp

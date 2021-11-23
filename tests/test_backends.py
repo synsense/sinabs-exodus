@@ -17,7 +17,11 @@ def compare_layers(lyr0, lyr1):
     for name, val in lyr0._param_dict.items():
         # Skip attributes which are not part of the other backend
         if name in neuron_params1:
-            assert neuron_params1[name] == val
+            if name == "tau_mem":
+                # Tau is not precise because of conversion to alpha
+                assert abs(neuron_params1[name] - val) < 1e-6
+            else:
+                assert neuron_params1[name] == val
 
 
 def test_backend_iaf_sinabs_to_slayer():
@@ -116,7 +120,7 @@ def test_backend_lif_sinabs_to_slayer():
 
     from sinabs.layers import LIF, LIFSqueeze
 
-    layer = LIF(alpha_mem=0.8)
+    layer = LIF(tau_mem=5.0)
 
     # Modify default parameters and buffers
     # for b in layer.buffers():
@@ -138,7 +142,7 @@ def test_backend_lif_sinabs_to_slayer():
 
     ## Squeezed layer
 
-    layer = LIFSqueeze(alpha_mem=0.8, num_timesteps=10)
+    layer = LIFSqueeze(tau_mem=5.0, num_timesteps=10)
 
     # Modify default parameters and buffers
     # for b in layer.buffers():
@@ -163,7 +167,7 @@ def test_backend_lif_slayer_to_sinabs():
 
     from sinabs.slayer.layers import LIF, LIFSqueeze
 
-    layer = LIF(alpha_mem=0.8)
+    layer = LIF(tau_mem=5.0)
 
     # Modify default parameters and buffers
     # for b in layer.buffers():
@@ -185,7 +189,7 @@ def test_backend_lif_slayer_to_sinabs():
 
     ## Squeezed layer
 
-    layer = LIFSqueeze(alpha_mem=0.8, num_timesteps=10)
+    layer = LIFSqueeze(tau_mem=5.0, num_timesteps=10)
 
     # Modify default parameters and buffers
     # for b in layer.buffers():
