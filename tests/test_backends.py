@@ -7,10 +7,10 @@ input_data_squeezed = input_data.view((20, 3, 4, 5))
 
 def compare_layers(lyr0, lyr1):
     for p0, p1 in zip(lyr0.parameters(), lyr1.parameters()):
-        assert (p0 == p1).all()
+        assert (p0 == p1.to(p0.device)).all()
         assert p0 is not p1
     for b0, b1 in zip(lyr0.buffers(), lyr1.buffers()):
-        assert (b0 == b1).all()
+        assert (b0 == b1.to(b0.device)).all()
         assert b0 is not b1
 
     neuron_params1 = lyr1._param_dict

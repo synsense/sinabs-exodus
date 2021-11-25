@@ -63,9 +63,9 @@ def generate_network(backend):
 def compare_networks(net0, net1):
     for module0, module1 in zip(net0.modules(), net1.modules()):
         for p0, p1 in zip(module0.parameters(), module1.parameters()):
-            assert (p0 == p1).all()
+            assert (p0 == p1.to(p0.device)).all()
         for b0, b1 in zip(module0.buffers(), module1.buffers()):
-            assert (b0 == b1).all()
+            assert (b0 == b1.to(b0.device)).all()
         if hasattr(module0, "_param_dict"):
             neuron_params1 = module1._param_dict
             for key, val in module0._param_dict.items():
