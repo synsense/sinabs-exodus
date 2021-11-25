@@ -159,9 +159,11 @@ torch::Tensor spikeGradsFullCuda(
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outGrad);
+	CHECK_INPUT(notClipped);
 
 	// check if tensor are in same device
 	CHECK_DEVICE(surr, outGrad);
+	CHECK_DEVICE(surr, notClipped);
 
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(surr.device().index());
@@ -180,6 +182,52 @@ torch::Tensor spikeGradsFullCuda(
 		refr, alpha, nNeurons, Ns);
 
 	return inGrad;
+}
+
+void lifForwardCuda(
+	const torch::Tensor& outputSpikes,
+	const torch::Tensor& vmem,
+	const torch::Tensor& input,
+	const torch::Tensor& vmemInitial,
+	const torch::Tensor& activationsPrev,
+	float membrSubtract,
+    float alpha,
+	float theta,
+	float thetaLow,
+	bool applyThetaLow)
+{
+	CHECK_INPUT(input);
+	CHECK_INPUT(outputSpikes);
+	CHECK_INPUT(vmem);
+	CHECK_INPUT(vmemInitial);
+	CHECK_INPUT(activationsPrev);
+
+	// check if tensors are on same device
+	CHECK_DEVICE(input, vmem);
+	CHECK_DEVICE(input, outputSpikes);
+	CHECK_DEVICE(input, vmemInitial);
+	CHECK_DEVICE(input, activationsPrev);
+
+	// set the current cuda device to wherever the tensor d_u resides
+	cudaSetDevice(input.device().index());
+
+	unsigned Ns = input.size(-1);
+	unsigned nNeurons = input.size(0);
+
+	// // output spikes
+	// auto outputSpikes = torch::empty_like(input);
+	// // membrane potential
+	// auto vmem = torch::empty_like(input);
+
+	lifForward<float>(
+		outputSpikes.data_ptr<float>(),
+		vmem.data_ptr<float>(),
+		input.data_ptr<float>(),
+		vmemInitial.data_ptr<float>(),
+		activationsPrev.data_ptr<float>(),
+		membrSubtract, alpha, theta, thetaLow, applyThetaLow, nNeurons, Ns);
+
+	return;
 }
 
 torch::Tensor convCuda(torch::Tensor input, torch::Tensor filter, float Ts)
@@ -285,6 +333,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 	m.def("spikeGrads"    ,  &spikeGradsCuda     ,	"Get spike gradients (CUDA)");
 	m.def("spikeGradsLB"  ,  &spikeGradsCudaLB   ,	"Get spike gradients with lower bounded vmem (CUDA)");
 	m.def("spikeGradsFull",  &spikeGradsFullCuda ,	"Get spike gradients from input to output spikes (CUDA)");
+	m.def("lifForward" 	  ,  &lifForwardCuda     , 	"LIF forward dynamics (CUDA)");
 	m.def("conv"     	  ,  &convCuda           , 	"Convolution in time (CUDA)");
 	m.def("corr"     	  ,  &corrCuda           , 	"Correlation in time (CUDA)");
 	m.def("shift"    	  ,  &shiftCuda          , 	"Element shift in time (CUDA)");

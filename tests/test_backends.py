@@ -81,7 +81,7 @@ def test_backend_iaf_slayer_to_sinabs():
     for p in layer.parameters():
         p += 1
 
-    layer.forward(input_data)
+    layer.forward(input_data.float().cuda())
 
     # Expect warning because slayer backend has additional neuron parameter
     # `scale_grads` that is not part of sinabs backend
@@ -103,7 +103,7 @@ def test_backend_iaf_slayer_to_sinabs():
     for p in layer.parameters():
         p += 1
 
-    layer.forward(input_data_squeezed)
+    layer.forward(input_data_squeezed.float().cuda())
 
     # Expect warning because slayer backend has additional neuron parameter
     # `scale_grads` that is not part of sinabs backend
@@ -175,7 +175,7 @@ def test_backend_lif_slayer_to_sinabs():
     for p in layer.parameters():
         p += 1
 
-    layer.forward(input_data)
+    layer.forward(input_data.float().cuda())
 
     # Expect warning because slayer backend has additional neuron parameter
     # `scale_grads` that is not part of sinabs backend
@@ -197,7 +197,7 @@ def test_backend_lif_slayer_to_sinabs():
     for p in layer.parameters():
         p += 1
 
-    layer.forward(input_data_squeezed)
+    layer.forward(input_data_squeezed.float().cuda())
 
     # Expect warning because slayer backend has additional neuron parameter
     # `scale_grads` that is not part of sinabs backend

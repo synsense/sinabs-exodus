@@ -6,6 +6,84 @@
 #ifndef SPIKEKERNELS_H_INCLUDED
 #define SPIKEKERNELS_H_INCLUDED
 
+
+/**
+ * Forward evolution for a single IAF or LIF neuron, over time. Including state decay,
+ * spike generation and subtract mechanism. No synaptic dynamics.
+ * vmem_t = alpha * (vmem_{t-1} - spikes_{t-1}) + input_t
+ * spikes_t = (vmem_t // theta) * (vmem_t > 0)
+ *
+ * @param outputSpikes 2D-tensor (nNeurons x Ns) to which the computed output spikes
+ 					   are to be written
+ * @param vmem 2D-tensor (nNeurons x Ns) to which the computed membrane potentials
+ * 			   are to be written
+ * @param input 2D-tensor (nNeurons x Ns) with the input
+ * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
+ * @param activationsPrev 1D-tensor (nNeurons) with the spikes of the preceding time step
+ * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
+ * @param theta Firing threshold
+ * @param thetaLow Lower bound to vmem
+ * @param applyThetaLow Flag whether vmem is lower bounded
+ * @param nNeurons Number of neurons/batches
+ * @param Ns Number of timesteps
+**/
+template <class T>
+__global__ void lifForwardKernel(
+	T* __restrict__ outputSpikes,
+	T* __restrict__ vmemAll,
+	T* __restrict__ input,
+	T* __restrict__ vmemInitial,
+	T* __restrict__ activationsPrev,
+	float membrSubtract,
+	float alpha,
+	float theta,
+	float thetaLow,
+	bool applyThetaLow,
+	unsigned nNeurons,
+	unsigned Ns)
+{
+	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if(neuronID >= nNeurons)	return;
+
+	T vmemCurr = vmemInitial[neuronID];
+	int activation = int(activationsPrev[neuronID]);
+
+	for(unsigned t=0; t<Ns; ++t){
+		// Subtract previous spikes
+		vmemCurr -= activation * membrSubtract;
+
+		// Decay state
+		vmemCurr *= alpha;
+
+		// ID of neuron and current timestep
+		unsigned linearID = t + neuronID * Ns;
+
+		// Add current input to vmemCurr
+		vmemCurr += input[linearID];
+
+		// Apply lower threshold
+		if (applyThetaLow && (vmemCurr < thetaLow)){
+			vmemCurr = thetaLow;
+		}
+
+		// Write current vmemCurr into tensor
+		vmemAll[linearID] = vmemCurr;
+
+		// Generate spikes
+		if(vmemCurr >= theta){
+			activation = vmemCurr / theta;
+		} else {
+			activation = 0;
+		}
+
+		// Write activation into tensor
+		outputSpikes[linearID] = 1.0f * activation;
+	}
+
+}
+
 template <class T>
 __global__ void getSpikesKernel(
 	T* __restrict__ d_s,
@@ -412,6 +490,60 @@ void spikeGradsRefr(T* inputGrad, const T* outputGrad, T* jaco, const T* surr, c
 
 
 /**
+ * Forward evolution for IAF or LIF neurons, including state decay, spike generation
+ * and subtract mechanism. No synaptic dynamics.
+ * vmem_t = alpha * (vmem_{t-1} - spikes_{t-1}) + input_t
+ * spikes_t = (vmem_t // theta) * (vmem_t > 0)
+ *
+ * For IAF dynamics set alpha = 1, for LIF 0 < alpha < 1
+ *
+ * Parallelize over neurons/batches
+ *
+ * @param outputSpikes 2D-tensor (nNeurons x Ns) to which the computed output spikes
+ 					   are to be written
+ * @param vmem 2D-tensor (nNeurons x Ns) to which the computed membrane potentials
+ * 			   are to be written
+ * @param input 2D-tensor (nNeurons x Ns) with the input
+ * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
+ * @param activationsPrev 1D-tensor (nNeurons) with the spikes of the preceding time step
+ * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
+ * @param theta Firing threshold
+ * @param thetaLow Lower bound to vmem
+ * @param applyThetaLow Flag whether vmem is lower bounded
+ * @param nNeurons Number of neurons/batches
+ * @param Ns Number of timesteps
+ */
+template <class T>
+void lifForward(
+	T* outputSpikes,
+	T* vmem,
+	T* const input,
+	T* const vmemInitial,
+	T* const activationsPrev,
+	const float membrSubtract,
+	const float alpha,
+	const float theta,
+	const float thetaLow,
+	const bool applyThetaLow,
+	const unsigned nNeurons,
+	const unsigned Ns)
+{
+
+	unsigned thread = 256;
+	unsigned block  = ceil(1.0f * nNeurons / thread);
+
+	lifForwardKernel<T><<< block, thread >>>(
+			outputSpikes,
+			vmem,
+			input,
+			vmemInitial,
+			activationsPrev,
+			membrSubtract, alpha, theta, thetaLow, applyThetaLow, nNeurons, Ns);
+}
+
+
+/**
  * Assuming a function that calculates the output spikes of an IAF or LIF neuron (step-function
  * or exponential for input spike response and step-function for refractory response, arbitrary
  * surrogate gradients) for a given (synaptic) input, use the fullGradsKernel kernel to compute
@@ -477,6 +609,7 @@ void spikeGradsFull(
 													membrSubtract, alpha, neuronsInGrid, Ns);
 	}
 }
+
 
 
 /**

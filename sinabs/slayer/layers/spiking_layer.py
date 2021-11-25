@@ -77,6 +77,9 @@ class IntegrateFireBase(SpikingLayer):
         self.alpha_mem = alpha_mem
         self.record = record
 
+        # - Make sure buffers and parameters are on cuda
+        self.cuda()
+
     def spike_function(self, inp: "torch.tensor") -> "torch.tensor":
         """
         Generate spikes from membrane potential.
@@ -206,7 +209,7 @@ class IntegrateFireBase(SpikingLayer):
         spike_input = spike_input.reshape(-1, num_timesteps)
         # -> (n_parallel, num_timesteps)
 
-        output_spikes, v_mem_full = self.spike_function(spike_input)
+        output_spikes, v_mem_full = self.spike_function(spike_input.contiguous())
 
         # Reshape output spikes and v_mem_full, store neuron states
         output_spikes = self._post_spike_processing(

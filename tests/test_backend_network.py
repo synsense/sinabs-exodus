@@ -123,8 +123,8 @@ def test_slyr_sinabs_slyr():
 
     # Make sure all networks produce the same output
     input_data = torch.rand([2, 2, 128, 128])
-    output_orig = snn_orig(input_data)
-    output_slayer = snn_slayer(input_data)
+    output_orig = snn_orig(input_data.float().cuda())
+    output_slayer = snn_slayer(input_data.float().cuda())
     # output_sinabs = snn_sinabs(input_data)
 
     # assert (output_orig == output_sinabs).all()

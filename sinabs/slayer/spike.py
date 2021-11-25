@@ -191,42 +191,28 @@ class SpikeFunctionIterForward(torch.autograd.Function):
 
         if not inp.ndim == 2:
             raise ValueError("'inp' must be 2D, (N, Time)")
+        if not inp.is_contiguous():
+            raise ValueError("'inp' has to be contiguous.")
         if threshold_low is not None and threshold <= threshold_low:
             raise ValueError("`threshold` must be greater than `threshold_low`.")
+        if not 0 <= alpha <= 1:
+            raise ValueError("'alpha' must be between 0 and 1.")
 
-        time_steps = inp.shape[1]
+        vmem = torch.empty_like(inp).contiguous()
+        output_spikes = torch.empty_like(inp).contiguous()
 
-        states = torch.zeros_like(inp)
-        spikes = []
-
-        for t in range(time_steps):
-
-            # Subtract a number of membrane_subtract's as there are spikes
-            state = state - activations * membrane_subtract
-            # Decay state and add input.
-            state = state * alpha
-            # Add input
-            state = inp[:, t] + state
-
-            # NOTE: The state update can be written in different, mathematically
-            # equivalent forms. However, when the computational order of evaluating
-            # the different statements differs from that in sinabs, there might be
-            # small numerical differences in the computed outputs and gradients.
-
-            if threshold_low is not None:
-                # ReLU for efficient implementation of lower limit
-                state = torch.nn.functional.relu(state - threshold_low) + threshold_low
-                # state = torch.clamp(state, min=threshold_low)
-            states[:, t] = state
-
-            # generate spikes
-            activations = (state > 0) * torch.div(
-                state, threshold, rounding_mode="floor"
-            )
-
-            spikes.append(activations)
-
-        output_spikes = torch.stack(spikes).transpose(0, 1)
+        sinabsslayerCuda.lifForward(
+            output_spikes,
+            vmem,
+            inp,
+            state,
+            activations,
+            membrane_subtract,
+            alpha,
+            threshold,
+            threshold_low if threshold_low is not None else 0,
+            threshold_low is not None,
+        )
 
         ctx.threshold = threshold
         ctx.threshold_low = threshold_low
@@ -234,9 +220,9 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         ctx.window = window or threshold
         ctx.membrane_subtract = membrane_subtract
         ctx.alpha = alpha
-        ctx.save_for_backward(states)
+        ctx.save_for_backward(vmem)
 
-        return output_spikes, states
+        return output_spikes, vmem
 
     @staticmethod
     def backward(ctx, grad_output, grad_state):
