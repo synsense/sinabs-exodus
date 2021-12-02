@@ -228,6 +228,58 @@ void lifForwardCuda(
 		membrSubtract, alpha, theta, thetaLow, applyThetaLow, nNeurons, Ns);
 
 	return;
+}   
+
+torch::Tensor leakyForwardCuda(
+	const torch::Tensor& input,
+	const torch::Tensor& vmemInitial,
+    float alpha)
+{
+	CHECK_INPUT(input);
+	CHECK_INPUT(vmemInitial);
+
+	// check if tensor are in same device
+	CHECK_DEVICE(input, vmemInitial);
+
+	// set the current cuda device to wherever the tensor d_u resides
+	cudaSetDevice(vmemInitial.device().index());
+
+	unsigned Ns = surr.size(-1);
+	unsigned nNeurons = surr.size(0);
+
+	// Tensor to store membrane potential
+	auto vmemFull = torch::empty_like(input);
+
+	leakyForward<float>(
+		vmemFull.data_ptr<float>(),
+		input.data_ptr<float>(),
+		vmemInitial.data_ptr<float>(),
+		alpha, nNeurons, Ns);
+
+	return vmemFull;
+}
+
+torch::Tensor leakyBackwardCuda(
+	const torch::Tensor& gradOutput,
+    float alpha)
+{
+	CHECK_INPUT(gradOutput);
+
+	// set the current cuda device to wherever the tensor d_u resides
+	cudaSetDevice(gradOutput.device().index());
+
+	unsigned Ns = gradOutput.size(-1);
+	unsigned nNeurons = gradOutput.size(0);
+
+	// Tensor to store input gradient 
+	auto gradInput = torch::empty_like(gradOutput);
+
+	leakyBackward<float>(
+		gradInput.data_ptr<float>(),
+		gradOutput.data_ptr<float>(),
+		alpha, nNeurons, Ns);
+
+	return gradInput;
 }
 
 torch::Tensor convCuda(torch::Tensor input, torch::Tensor filter, float Ts)
@@ -334,6 +386,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 	m.def("spikeGradsLB"  ,  &spikeGradsCudaLB   ,	"Get spike gradients with lower bounded vmem (CUDA)");
 	m.def("spikeGradsFull",  &spikeGradsFullCuda ,	"Get spike gradients from input to output spikes (CUDA)");
 	m.def("lifForward" 	  ,  &lifForwardCuda     , 	"LIF forward dynamics (CUDA)");
+	m.def("leakyForward"  ,  &leakyForwardCuda   ,	"Forward pass of leaky integrator");
+	m.def("leakyBackward" ,  &leakyBackwardCuda  ,	"Backward pass of leaky integrator");
 	m.def("conv"     	  ,  &convCuda           , 	"Convolution in time (CUDA)");
 	m.def("corr"     	  ,  &corrCuda           , 	"Correlation in time (CUDA)");
 	m.def("shift"    	  ,  &shiftCuda          , 	"Element shift in time (CUDA)");
