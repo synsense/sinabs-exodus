@@ -164,14 +164,19 @@ class SpikeFunctionIterForward(torch.autograd.Function):
 
         Parameters
         ----------
-        membr_pot: torch.Tensor
-            The membrane potential. Expected shape: (N, T_sim), where N is
+        inp: torch.Tensor
+            Input to the layer. Expected shape: (N, T_sim), where N is
             *anything* that can be computed in parallel, i.e. batches, neurons...
             Has to be contiguous.
         membrane_subtract: float
             Value that is subracted from membrane potential after spike
         alpha : float
             State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
+        state : torch.Tensor
+            1D shape (N,).  Initial states. Has to be contiguous. 
+        activations : torch.tensor
+            1D, shape (N,). Activations from previous time step.
+            Has to be contiguous.
         threshold: float
             Firing threshold
         threshold_low: float
