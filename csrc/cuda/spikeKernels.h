@@ -84,6 +84,102 @@ __global__ void lifForwardKernel(
 
 }
 
+
+/**
+ * Forward evolution for (leaky) integrator dynamic, over time.
+ * vmem_t = alpha * vmem_{t-1} + input_t
+ *
+ * @param vmem 2D-tensor (nNeurons x Ns) to which the computed membrane potentials
+ * 			   are to be written
+ * @param input 2D-tensor (nNeurons x Ns) with the input
+ * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
+ * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
+ * @param nNeurons Number of neurons/batches
+ * @param Ns Number of timesteps
+**/
+template <class T>
+__global__ void leakyForwardKernel(
+	T* __restrict__ vmemAll,
+	const T* __restrict__ input,
+	const T* __restrict__ vmemInitial,
+	float alpha,
+	unsigned nNeurons,
+	unsigned Ns)
+{
+	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if(neuronID >= nNeurons)	return;
+
+	T vmemCurr = vmemInitial[neuronID];
+
+	for(unsigned t=0; t<Ns; ++t){
+
+		// Decay state
+		vmemCurr *= alpha;
+
+		// ID of neuron and current timestep
+		unsigned linearID = t + neuronID * Ns;
+
+		// Add current input to vmemCurr
+		vmemCurr += input[linearID];
+
+		// Write current vmemCurr into tensor
+		vmemAll[linearID] = vmemCurr;
+	}
+
+}
+
+
+/**
+ * WIP
+ * Backward pass for (leaky) integrator dynamic.
+ *
+ * Using that 
+ * \frac{dOut_j}{dIn_i} = alhpa^{j-i} if j>=i, else 0
+ * and
+ * gradInput_i = sum_{j=i}^{N_s-1} \frac{dOut_j}{dIn_i} gradOutput_j
+ * = sum_{j=i}^{N_s-1} alpha^{j-i} * gradOutput_j
+ * = alpha * sum_{j=i+1}^{N_s-1} alpha^{j-(i+1)} * gradOutput_j + gradOutput_i
+ * gradInput can be calculated recursively as 
+ * gradInput_i = alpha * gradInput_{i+1} + gradOutput_i
+ * gradInput_{N_s-1} = gradOutput_{N_s-1}
+ *
+ * @param vmem 2D-tensor (nNeurons x Ns) to which the computed membrane potentials
+ * 			   are to be written
+ * @param input 2D-tensor (nNeurons x Ns) with the input
+ * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
+ * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
+ * @param nNeurons Number of neurons/batches
+ * @param Ns Number of timesteps
+**/
+template <class T>
+__global__ void leakyBackwardKernel(
+	T* __restrict__ gradInput,
+	T* __restrict__ gradOutput,
+	float alpha,
+	unsigned nNeurons,
+	unsigned Ns)
+{
+	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if(neuronID >= nNeurons)	return;
+
+	T grad_curr = 0;
+
+	for(unsigned t=Ns-1; t<Ns; --t){
+
+		// ID of neuron and current timestep
+		unsigned linearID = t + neuronID * Ns;
+
+		// Add corresponding element of gradOutput and multiply by alpha
+		grad_curr = grad_curr * alhpa + gradOutput[linearID];
+
+		// Write current grad into gradInput
+		gradInput[linearID] = grad_curr;
+	}
+
+}
+
 template <class T>
 __global__ void getSpikesKernel(
 	T* __restrict__ d_s,
@@ -379,7 +475,7 @@ __global__ void spikeGradsKernelLB(
  * the spike output wrt. the input at the i-th timestep.
  *
  * inputGrad_i = surr_i * outputGrad_i * notClipped_{i} +
- * 				 \sum_{j=i}^{N_s - 1} outputGrad_j * surr_j *
+ * 				 \sum_{j=i+1}^{N_s - 1} outputGrad_j * surr_j *
  * 				 * \prod_{k=i}^{j-1} (alpha - surr_k * membrSubtract) * notClipped_{k}
  * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
  * 					input gradients are to be written
@@ -433,6 +529,48 @@ __global__ void fullGradsKernel(
 		accGrad *= (newFactor * notClipped[linearSurrID]);
 		// Add new term to current gradient
 		inputGrad[inputGradID] += accGrad * surr[linearSurrID] * outputGrad[linearSurrID];
+	}
+}
+
+
+/**
+ * WIP
+ * Equivalent to fullGradsKernel but with a recursive formula:
+ * inputGrad_i = notClipped_i * (surr_i * ouputGrad_i + (alpha - surr_i * membrSubtract))
+ * inputGrad_{N_s-1} = surr_{N_s-1} * notClipped_{N_s-1} * ouputGrad_{N_s-1}
+ *
+ * Parallelize across neurons and batches
+ */
+template <class T>
+__global__ void fullGradsKernelRecursive(
+	T* __restrict__ inputGrad,
+	const T* __restrict__ outputGrad,
+	const T* __restrict__ surr,
+	const T* __restrict__ notClipped,
+	float membrSubtract, float alpha, unsigned nNeurons, unsigned Ns)
+{
+	// Identifier for the current neuron and/or batch
+	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
+	if(neuronID >= nNeurons)	return;
+
+	// Index of first element in current row of 2D tensors (i.e. for current neuron)
+	unsigned linearRowID = neuronID * Ns;
+
+	T new_summand;  // notClipped_i * ouputGrad_i
+	T new_factor;  // (alpha - surr_i * membrSubtract)
+	T grad = 1.0;  // Current gradient.
+
+	// ID corresponding to current gradient component
+	unsigned linearID;
+
+	for(unsigned j=Ns-1; j-- > 0; )
+	{
+		linearID = linearRowID + j;
+
+		new_summand = outputGrad[linearID] * surr[linearID];
+		new_factor = (alpha - surr[linearID]);
+		grad = (new_summand + new_factor * grad) * notClipped[linearID];
+		inputGrad[linearID] = grad;
 	}
 }
 
@@ -610,6 +748,74 @@ void spikeGradsFull(
 	}
 }
 
+/**
+ * Forward pass for exponential leak
+ * v_t = alpha * v_{t-1} + I_t
+ * Parallelize across neurons/batches
+ */
+template <class T>
+void leakyForward(
+	T* vmemAll,
+	const T* input,
+	const T* vmemInitial,
+	float alpha, unsigned nNeurons, unsigned Ns)
+{
+
+	unsigned thread = 256;
+	unsigned block  = ceil(1.0f * nNeurons / thread);
+
+	leakyForwardKernel<T><<< block, thread >>>(
+			vmemAll,
+			input,
+			vmemInitial,
+			alpha, nNeurons, Ns);
+}
+
+/**
+ * Backward pass for exponential leak
+ * v_t = alpha * v_{t-1} + I_t
+ * Parallelize across neurons/batches
+ */
+template <class T>
+void leakyBackward(
+	T* inputGrad,
+	const T* outputGrad,
+	float alpha, unsigned nNeurons, unsigned Ns)
+{
+
+	unsigned thread = 256;
+	unsigned block  = ceil(1.0f * nNeurons / thread);
+
+	leakyBackwardKernel<T><<< block, thread >>>(
+			inputGrad,
+			outputGrad,
+			alpha, nNeurons, Ns);
+}
+
+
+/**
+ * WIP
+ * Like spikeGradsFull, but using a different computation method
+ */
+template <class T>
+void spikeGradsFullRecursive(
+	T* inputGrad,
+	const T* outputGrad,
+	const T* surr,
+	const T* notClipped,
+	float membrSubtract, float alpha, unsigned nNeurons, unsigned Ns)
+{
+
+	unsigned thread = 256;
+	unsigned block  = ceil(1.0f * nNeurons / thread);
+
+	fullGradsKernelRecursive<T><<< block, thread >>>(
+			inputGrad,
+			outputGrad,
+			surr,
+			notClipped,
+			membrSubtract, alpha, nNeurons, Ns);
+}
 
 
 /**

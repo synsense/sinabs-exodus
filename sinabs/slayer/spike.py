@@ -246,6 +246,12 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             ctx.alpha,
         )
 
+        # TODO:
+        # Currently gradient for `grad_state` is ignored. Would have to add gradient
+        # of states to returned grads. Could do this by not multiplying grad_output
+        # with surrogates in spikeGradsFull and passing surrogates * grad_output + grad_states
+        # instead of grad_output.
+
         return (
             ctx.scale_rho * grad_input,
             None,
