@@ -1,14 +1,10 @@
 import sinabsslayerCuda
 import torch
 
+
 class LeakyIntegrator(torch.autograd.Function):
     @staticmethod
-    def Forward(
-        ctx,
-        inp: torch.tensor,
-        state_initial: torch.tensor,
-        alpha: float,
-    ):
+    def forward(ctx, inp: torch.tensor, state_initial: torch.tensor, alpha: float):
         """
         Evolve a leaky integrator as
         v_t = alpha * v_{t-1} + input_{t}
@@ -25,10 +21,10 @@ class LeakyIntegrator(torch.autograd.Function):
         alpha : float
             State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
         """
-        
+
         if not inp.ndim == 2:
             raise ValueError("'inp' must be 2D (N, Time)")
-        if not vmem_initial.ndim == 1:
+        if not state_initial.ndim == 1:
             raise ValueError("'state_initial' must be 1D (N,)")
 
         states = sinabsslayerCuda.leakyForward(inp, state_initial, alpha)
@@ -39,6 +35,6 @@ class LeakyIntegrator(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        grad_input = sinabsslayerCuda.leakyBackward(grad_output, alpha)
+        grad_input = sinabsslayerCuda.leakyBackward(grad_output, ctx.alpha)
 
         return grad_input, None, None

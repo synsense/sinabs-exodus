@@ -155,7 +155,7 @@ __global__ void leakyForwardKernel(
 template <class T>
 __global__ void leakyBackwardKernel(
 	T* __restrict__ gradInput,
-	T* __restrict__ gradOutput,
+	const T* __restrict__ gradOutput,
 	float alpha,
 	unsigned nNeurons,
 	unsigned Ns)
@@ -172,7 +172,7 @@ __global__ void leakyBackwardKernel(
 		unsigned linearID = t + neuronID * Ns;
 
 		// Add corresponding element of gradOutput and multiply by alpha
-		grad_curr = grad_curr * alhpa + gradOutput[linearID];
+		grad_curr = grad_curr * alpha + gradOutput[linearID];
 
 		// Write current grad into gradInput
 		gradInput[linearID] = grad_curr;

@@ -202,24 +202,6 @@ def test_slayer_model():
     assert out.shape == (batch_size, num_timesteps, n_classes)
 
 
-def test_slayer_model_batch():
-    import torch
-
-    num_timesteps = 100
-    n_channels = 16
-    batch_size = 1
-    n_classes = 10
-    device = "cuda:0"
-    tau_mem = 10
-    model = build_slayer_model(
-        tau_mem=tau_mem, n_channels=n_channels, n_classes=n_classes
-    ).to(device)
-    input_data = torch.rand((batch_size, num_timesteps, n_channels)).to(device)
-
-    out = model(input_data)
-    assert out.shape == (batch_size, num_timesteps, n_classes)
-
-
 def test_gradient_scaling():
     import torch
 
@@ -362,12 +344,12 @@ def test_slayer_vs_sinabs_compare():
         # plt.scatter(*np.where(slayer_out.cpu().detach().numpy()), marker="x")
         # plt.show()
 
-        # assert all(
-        #     torch.allclose(l_sin.v_mem, l_slyr.v_mem)
-        #     for (l_sin, l_slyr) in zip(
-        #         slayer_model.spiking_layers, sinabs_model.spiking_layers
-        #     )
-        # )
+        assert all(
+            torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
+            for (l_sin, l_slyr) in zip(
+                slayer_model.spiking_layers, sinabs_model.spiking_layers
+            )
+        )
         assert (sinabs_out == slayer_out).all()
 
         # Compare gradients

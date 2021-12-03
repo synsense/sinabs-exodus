@@ -244,8 +244,8 @@ torch::Tensor leakyForwardCuda(
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(vmemInitial.device().index());
 
-	unsigned Ns = surr.size(-1);
-	unsigned nNeurons = surr.size(0);
+	unsigned Ns = input.size(-1);
+	unsigned nNeurons = input.size(0);
 
 	// Tensor to store membrane potential
 	auto vmemFull = torch::empty_like(input);
