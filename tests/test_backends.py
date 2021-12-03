@@ -208,3 +208,85 @@ def test_backend_lif_slayer_to_sinabs():
 
     # Make sure that parameters and buffers have not been changed during `to_backend` call
     compare_layers(layer_sinabs_backend, layer)
+
+
+def test_backend_expleak_sinabs_to_slayer():
+
+    from sinabs.layers import ExpLeak, ExpLeakSqueeze
+
+    layer = ExpLeak(tau_leak=5.0)
+
+    # Modify default parameters and buffers
+    # for b in layer.buffers():
+    #     b += 1
+    for p in layer.parameters():
+        p += 1
+
+    layer.forward(input_data)
+
+    layer_slayer_backend = layer.to_backend("slayer")
+    # Make sure object has not changed in-place
+    assert layer is not layer_slayer_backend
+
+    # Make sure that parameters and buffers have not been changed during `to_backend` call
+    compare_layers(layer_slayer_backend, layer)
+
+    ## Squeezed layer
+
+    layer = ExpLeakSqueeze(tau_leak=5.0, num_timesteps=10)
+
+    # Modify default parameters and buffers
+    # for b in layer.buffers():
+    #     b += 1
+    for p in layer.parameters():
+        p += 1
+
+    layer.forward(input_data_squeezed)
+
+    layer_slayer_backend = layer.to_backend("slayer")
+    # Make sure object has not changed in-place
+    assert layer is not layer_slayer_backend
+
+    # Make sure that parameters and buffers have not been changed during `to_backend` call
+    compare_layers(layer_slayer_backend, layer)
+
+
+def test_backend_expleak_slayer_to_sinabs():
+
+    from sinabs.slayer.layers import ExpLeak, ExpLeakSqueeze
+
+    layer = ExpLeak(tau_leak=5.0)
+
+    # Modify default parameters and buffers
+    # for b in layer.buffers():
+    #     b += 1
+    for p in layer.parameters():
+        p += 1
+
+    layer.forward(input_data.float().cuda())
+
+    layer_sinabs_backend = layer.to_backend("sinabs")
+    # Make sure object has not changed in-place
+    assert layer is not layer_sinabs_backend
+
+    # Make sure that parameters and buffers have not been changed during `to_backend` call
+    compare_layers(layer_sinabs_backend, layer)
+
+    ## Squeezed layer
+
+    layer = ExpLeakSqueeze(tau_leak=5.0, num_timesteps=10)
+
+    # Modify default parameters and buffers
+    # for b in layer.buffers():
+    #     b += 1
+    for p in layer.parameters():
+        p += 1
+
+    layer.forward(input_data_squeezed.float().cuda())
+
+    layer_sinabs_backend = layer.to_backend("sinabs")
+    # Make sure object has not changed in-place
+    assert layer is not layer_sinabs_backend
+
+    # Make sure that parameters and buffers have not been changed during `to_backend` call
+    compare_layers(layer_sinabs_backend, layer)
