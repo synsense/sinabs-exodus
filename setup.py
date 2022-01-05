@@ -32,6 +32,6 @@ setup(
         )
     ],
     cmdclass={'build_ext': BuildExtension},
-    install_requires=["sinabs"]
+    # install_requires=["sinabs"]
 )
 

@@ -1,11 +1,16 @@
+import pytest
+import torch
+import torch.nn as nn
+import time
+import sinabs.slayer.layers as ssl
+import sinabs.layers as sl
+import sinabs.activation as sa
+
 atol = 1e-5
 rtol = 1e-4
 
 
 def test_iaf_inference():
-    import torch
-    from sinabs.slayer.layers import IAFSqueeze, IAF
-
     num_timesteps = 100
     threshold = 0.2
     threshold_low = -0.2
@@ -19,13 +24,17 @@ def test_iaf_inference():
     input_data = (spikes_pos.float() - spikes_neg.float()).to(device)
     input_data_squeeze = input_data.reshape(-1, *n_neurons)
 
-    layer_squeeze = IAFSqueeze(num_timesteps=num_timesteps, threshold=threshold).to(
+    act_fn = sa.ActivationFunction(spike_threshold=threshold)
+
+    layer_squeeze = ssl.IAFSqueeze(activation_fn=act_fn, 
+                                    num_timesteps=num_timesteps).to(
         device
     )
-    layer_squeeze_thr_low = IAFSqueeze(
-        num_timesteps=num_timesteps, threshold=threshold, threshold_low=threshold_low
+    layer_squeeze_thr_low = ssl.IAFSqueeze(activation_fn=act_fn, 
+                                            num_timesteps=num_timesteps, 
+                                            threshold_low=threshold_low
     ).to(device)
-    layer = IAF(num_timesteps=num_timesteps, threshold=threshold).to(device)
+    layer = ssl.IAF(activation_fn=act_fn).to(device)
 
     output = layer(input_data)
     assert output.shape == input_data.shape
@@ -48,23 +57,22 @@ def test_iaf_inference():
 def build_sinabs_model(
     n_channels=16, n_classes=10, batch_size=1, threshold=1.0, threshold_low=None
 ):
-    import torch.nn as nn
-    from sinabs.layers import IAFSqueeze
 
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
+            act_fn = sa.ActivationFunction(spike_threshold=threshold)
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = IAFSqueeze(
-                threshold=threshold, threshold_low=threshold_low, batch_size=batch_size
+            self.spk1 = sl.IAFSqueeze(
+                activation_fn=act_fn, threshold_low=threshold_low, batch_size=batch_size
             )
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = IAFSqueeze(
-                threshold=threshold, threshold_low=threshold_low, batch_size=batch_size
+            self.spk2 = sl.IAFSqueeze(
+                activation_fn=act_fn, threshold_low=threshold_low, batch_size=batch_size
             )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = IAFSqueeze(
-                threshold=threshold, threshold_low=threshold_low, batch_size=batch_size
+            self.spk3 = sl.IAFSqueeze(
+                activation_fn=act_fn, threshold_low=threshold_low, batch_size=batch_size
             )
 
         def forward(self, data):
@@ -92,8 +100,6 @@ def build_sinabs_model(
 
 
 def test_sinabs_model():
-    import torch
-
     num_timesteps = 100
     n_channels = 16
     batch_size = 2
@@ -112,7 +118,6 @@ def build_slayer_model(
     n_classes=10,
     num_timesteps=100,
     batch_size=None,
-    scale_grads=1.0,
     threshold=1.0,
     threshold_low=None,
 ):
@@ -122,29 +127,28 @@ def build_slayer_model(
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
+            act_fn = sa.ActivationFunction(spike_threshold=threshold)
+
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = IAFSqueeze(
+            self.spk1 = ssl.IAFSqueeze(
                 num_timesteps=num_timesteps,
                 batch_size=batch_size,
-                threshold=threshold,
+                activation_fn=act_fn,
                 threshold_low=threshold_low,
-                scale_grads=scale_grads,
             )
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = IAFSqueeze(
+            self.spk2 = ssl.IAFSqueeze(
                 num_timesteps=num_timesteps,
                 batch_size=batch_size,
-                threshold=threshold,
+                activation_fn=act_fn,
                 threshold_low=threshold_low,
-                scale_grads=scale_grads,
             )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = IAFSqueeze(
+            self.spk3 = ssl.IAFSqueeze(
                 num_timesteps=num_timesteps,
                 batch_size=batch_size,
-                threshold=threshold,
+                activation_fn=act_fn,
                 threshold_low=threshold_low,
-                scale_grads=scale_grads,
             )
 
         def forward(self, data):
@@ -190,8 +194,6 @@ def test_slayer_model():
 
 
 def test_slayer_model_batch():
-    import torch
-
     num_timesteps = 100
     n_channels = 16
     batch_size = 2
@@ -208,8 +210,6 @@ def test_slayer_model_batch():
 
 
 def test_gradient_scaling():
-    import torch
-
     torch.manual_seed(0)
     num_timesteps = 100
     n_channels = 16
@@ -238,7 +238,6 @@ def test_gradient_scaling():
         n_channels=n_channels,
         n_classes=n_classes,
         num_timesteps=num_timesteps,
-        scale_grads=0.1,
         threshold=0.1,
         threshold_low=-0.1,
     ).to(device)
@@ -264,9 +263,6 @@ def test_gradient_scaling():
 
 
 def test_slayer_vs_sinabs_compare():
-    import torch
-    import time
-
     num_timesteps = 500
     n_channels = 16
     batch_size = 100
@@ -358,9 +354,6 @@ def test_slayer_vs_sinabs_compare():
 
 
 def test_slayer_vs_sinabs_compare_thr_low():
-    import torch
-    import time
-
     num_timesteps = 500
     n_channels = 16
     batch_size = 100
@@ -452,11 +445,8 @@ def test_slayer_vs_sinabs_compare_thr_low():
         # Compare gradients
         assert all(torch.allclose(g0, g1) for g0, g1 in zip(grads_sinabs, grads_slayer))
 
-
+@pytest.mark.skip()
 def test_slayer_vs_sinabs_compare_thr_low_reset():
-    import torch
-    import time
-
     num_timesteps = 500
     n_channels = 16
     batch_size = 100

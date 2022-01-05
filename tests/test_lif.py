@@ -1,13 +1,16 @@
 import pytest
+import torch
+import torch.nn as nn
+import sinabs.slayer.layers as ssl
+import sinabs.layers as sl
+import sinabs.activation as sa
+
 
 atol = 1e-5
 rtol = 1e-4
 
 
 def test_lif_inference():
-    import torch
-    from sinabs.slayer.layers import LIF, LIFSqueeze
-
     num_timesteps = 100
     tau_mem = 10
     threshold = 0.2
@@ -21,16 +24,21 @@ def test_lif_inference():
     input_data = ((rand_data > 0.97).float() - (rand_data < 0.03).float()).to(device)
     input_data_squeeze = input_data.reshape(-1, n_neurons)
 
-    layer = LIF(num_timesteps=num_timesteps, tau_mem=tau_mem, threshold=threshold).to(
+    act_fn = sa.ActivationFunction(spike_threshold=threshold)
+
+    layer = ssl.LIF(activation_fn=act_fn, 
+                    num_timesteps=num_timesteps, 
+                    tau_mem=tau_mem).to(
         device
     )
-    layer_squeeze = LIFSqueeze(
-        num_timesteps=num_timesteps, tau_mem=tau_mem, threshold=threshold
+    layer_squeeze = ssl.LIFSqueeze(activation_fn=act_fn,
+                                    num_timesteps=num_timesteps,
+                                    tau_mem=tau_mem,
     ).to(device)
-    layer_squeeze_thr_low = LIFSqueeze(
+    layer_squeeze_thr_low = ssl.LIFSqueeze(
+        activation_fn=act_fn, 
         num_timesteps=num_timesteps,
         tau_mem=tau_mem,
-        threshold=threshold,
         threshold_low=threshold_low,
     ).to(device)
 
@@ -56,22 +64,20 @@ def test_lif_inference():
 def build_sinabs_model(
     tau_mem, n_channels=16, n_classes=10, threshold=1.0, threshold_low=None
 ):
-    import torch.nn as nn
-    from sinabs.layers.lif import LIF
 
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = LIF(
+            self.spk1 = sl.LIF(
                 tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
             )
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = LIF(
+            self.spk2 = sl.LIF(
                 tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
             )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = LIF(
+            self.spk3 = sl.LIF(
                 tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
             )
 
@@ -126,14 +132,11 @@ def build_slayer_model(
     threshold=1.0,
     threshold_low=None,
 ):
-    import torch.nn as nn
-    from sinabs.slayer.layers import LIF
-
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
-            self.spk1 = LIF(
+            self.spk1 = ssl.LIF(
                 # tau_mem=tau_mem,
                 tau_mem=tau_mem,
                 threshold=threshold,
@@ -142,7 +145,7 @@ def build_slayer_model(
             )
 
             self.lin2 = nn.Linear(16, 32, bias=False)
-            self.spk2 = LIF(
+            self.spk2 = ssl.LIF(
                 # tau_mem=tau_mem,
                 tau_mem=tau_mem,
                 threshold=threshold,
@@ -151,7 +154,7 @@ def build_slayer_model(
             )
 
             self.lin3 = nn.Linear(32, n_classes, bias=False)
-            self.spk3 = LIF(
+            self.spk3 = ssl.LIF(
                 # tau_mem=tau_mem,
                 tau_mem=tau_mem,
                 threshold=threshold,

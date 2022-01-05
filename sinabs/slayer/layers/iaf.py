@@ -1,7 +1,8 @@
 import torch 
-from typing import Optional
+from typing import Callable, Optional
 from sinabs.slayer.layers import IntegrateFireBase
 from sinabs.layers import SqueezeMixin
+from sinabs.activation import ActivationFunction
 
 
 __all__ = ["IAF", "IAFSqueeze"]
@@ -10,46 +11,32 @@ __all__ = ["IAF", "IAFSqueeze"]
 class IAF(IntegrateFireBase):
     def __init__(
         self,
-        threshold: float = 1.0,
+        activation_fn: Callable = ActivationFunction(),
         threshold_low: Optional[float] = None,
-        membrane_subtract: Optional[float] = None,
-        window: float = 1.0,
-        scale_grads: float = 1.0,
-        record: bool = True,
-        membrane_reset=False,
-        *args,
-        **kwargs,
+        shape: Optional[torch.Size] = None,
+        record: bool = False,
     ):
         """
         Slayer implementation of a spiking, non-leaky, IAF neuron with learning enabled.
 
-        Parameters:
-        -----------
-        threshold: float
-            Spiking threshold of the neuron.
-        threshold_low: Optional[float]
-            Lower bound for membrane potential.
-        membrane_subtract: Optional[float]
-            Constant to be subtracted from membrane potential when neuron spikes.
-            If ``None`` (default): Same as ``threshold``.
-        window: float
-            Distance between step of Heaviside surrogate gradient and threshold.
-        scale_grads: float
-            Scale surrogate gradients in backpropagation.
+        Parameters
+        ----------
+        activation_fn: Callable
+            a sinabs.activation.ActivationFunction to provide spiking and reset mechanism. Also defines a surrogate gradient.
+        threshold_low: float or None
+            Lower bound for membrane potential v_mem, clipped at every time step.
+        shape: torch.Size
+            Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
         record: bool
-            Record membrane potential and spike output during forward call.
-        membrane_reset: bool
-            Currently not supported.
+            Record membrane potential and spike output during forward call. Default is False.
         """
 
         super().__init__(
-            threshold=threshold,
-            threshold_low=threshold_low,
-            membrane_subtract=membrane_subtract,
-            window=window,
-            scale_grads=scale_grads,
             alpha_mem=1.0,
-            membrane_reset=membrane_reset,
+            activation_fn=activation_fn,
+            threshold_low=threshold_low,
+            shape=shape,
+            record=record,
         )
 
     @property
