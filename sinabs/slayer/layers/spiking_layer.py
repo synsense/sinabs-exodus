@@ -3,13 +3,13 @@ from typing import Optional, Tuple
 import torch
 
 from sinabs.slayer.spike import SpikeFunctionIterForward
-from sinabs.layers import SpikingLayer
+from sinabs.layers import StatefulLayer
 
 
 __all__ = ["IntegrateFireBase"]
 
 
-class IntegrateFireBase(SpikingLayer):
+class IntegrateFireBase(StatefulLayer):
     """
     Slayer implementation of a leaky or non-leaky integrate and fire neuron with
     learning enabled. Does not simulate synaptic dynamics.
@@ -63,12 +63,7 @@ class IntegrateFireBase(SpikingLayer):
             raise ValueError("`alpha_mem` must be between 0 and 1.")
 
         super().__init__(
-            *args,
-            **kwargs,
-            threshold=threshold,
-            threshold_low=threshold_low,
-            membrane_subtract=membrane_subtract,
-            membrane_reset=membrane_reset,
+            state_names=['v_mem']
         )
 
         # - Store hyperparameters

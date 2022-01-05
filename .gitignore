@@ -1,0 +1,16 @@
+.ipynb_checkpoints
+build
+dist
+__pycache__
+sinabs_slayer.egg-info
+sinabsslayerCuda.cpython-38-x86_64-linux-gnu.so
+.vscode
+sinabs/__init__.py
+sinabs/activation/
+sinabs/cnnutils.py
+sinabs/from_torch.py
+sinabs/layers/
+sinabs/network.py
+sinabs/onnx/
+sinabs/synopcounter.py
+sinabs/utils.py
