@@ -1,4 +1,5 @@
 import pytest
+import time
 import torch
 import torch.nn as nn
 import sinabs.slayer.layers as ssl
@@ -27,7 +28,6 @@ def test_lif_inference():
     act_fn = sa.ActivationFunction(spike_threshold=threshold)
 
     layer = ssl.LIF(activation_fn=act_fn, 
-                    num_timesteps=num_timesteps, 
                     tau_mem=tau_mem).to(
         device
     )
@@ -68,17 +68,19 @@ def build_sinabs_model(
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
+            act_fn = sa.ActivationFunction(spike_threshold=threshold)
+
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
             self.spk1 = sl.LIF(
-                tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
+                tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low
             )
             self.lin2 = nn.Linear(16, 32, bias=False)
             self.spk2 = sl.LIF(
-                tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
+                tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low
             )
             self.lin3 = nn.Linear(32, n_classes, bias=False)
             self.spk3 = sl.LIF(
-                tau_mem=tau_mem, threshold=threshold, threshold_low=threshold_low
+                tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low
             )
 
         def forward(self, data):
@@ -106,16 +108,13 @@ def build_sinabs_model(
     return TestModel()
 
 
-# @pytest.mark.skip("sinabs-cpp not stable")
 def test_sinabs_model():
-    import torch
-
     num_timesteps = 100
     n_channels = 16
     batch_size = 1
     n_classes = 10
     device = "cuda:0"
-    tau_mem = 10
+    tau_mem = 10.
     model = build_sinabs_model(tau_mem, n_channels=n_channels, n_classes=n_classes).to(
         device
     )
@@ -128,38 +127,36 @@ def build_slayer_model(
     tau_mem,
     n_channels=16,
     n_classes=10,
-    scale_grads=1.0,
     threshold=1.0,
     threshold_low=None,
 ):
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
+            act_fn = sa.ActivationFunction(spike_threshold=threshold)
+
             self.lin1 = nn.Linear(n_channels, 16, bias=False)
             self.spk1 = ssl.LIF(
                 # tau_mem=tau_mem,
                 tau_mem=tau_mem,
-                threshold=threshold,
+                activation_fn=act_fn,
                 threshold_low=threshold_low,
-                scale_grads=scale_grads,
             )
 
             self.lin2 = nn.Linear(16, 32, bias=False)
             self.spk2 = ssl.LIF(
                 # tau_mem=tau_mem,
                 tau_mem=tau_mem,
-                threshold=threshold,
+                activation_fn=act_fn,
                 threshold_low=threshold_low,
-                scale_grads=scale_grads,
             )
 
             self.lin3 = nn.Linear(32, n_classes, bias=False)
             self.spk3 = ssl.LIF(
                 # tau_mem=tau_mem,
                 tau_mem=tau_mem,
-                threshold=threshold,
+                activation_fn=act_fn,
                 threshold_low=threshold_low,
-                scale_grads=scale_grads,
             )
 
         def forward(self, data):
@@ -188,8 +185,6 @@ def build_slayer_model(
 
 
 def test_slayer_model():
-    import torch
-
     num_timesteps = 100
     n_channels = 16
     batch_size = 1
@@ -205,74 +200,12 @@ def test_slayer_model():
     assert out.shape == (batch_size, num_timesteps, n_classes)
 
 
-def test_gradient_scaling():
-    import torch
-
-    torch.manual_seed(0)
-    num_timesteps = 100
-    n_channels = 16
-    batch_size = 1
-    n_classes = 2
-    device = "cuda:0"
-    tau_mem = 10
-    model = build_slayer_model(
-        tau_mem=tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        scale_grads=1.0,
-        threshold=0.01,
-    ).to(device)
-    initial_weights = [p.data.clone() for p in model.parameters()]
-
-    input_data = (
-        (torch.rand((batch_size, num_timesteps, n_channels)) > 0.9).float().to(device)
-    )
-
-    out = model(input_data).cpu()
-    loss = torch.nn.functional.mse_loss(out, torch.ones_like(out))
-    loss.backward()
-    grads = [p.grad for p in model.parameters()]
-    # Calculate ratio of std of first and last layer gradients
-    grad_ratio = torch.std(grads[0]) / torch.std(grads[-1])
-
-    # Generate identical model, except for gradient scaling
-    model_new = build_slayer_model(
-        tau_mem=tau_mem,
-        n_channels=n_channels,
-        n_classes=n_classes,
-        scale_grads=0.1,
-        threshold=0.01,
-    ).to(device)
-    for p_new, p_old in zip(model_new.parameters(), initial_weights):
-        p_new.data = p_old.clone()
-
-    out_new = model_new(input_data).cpu()
-    # Make sure output is the same as for original model
-    assert (out_new == out).all()
-
-    # Compare gradient ratios
-    loss_new = torch.nn.functional.mse_loss(out_new, torch.ones_like(out))
-
-    # Make sure loss is the same as for original model
-    assert (loss_new == loss).all()
-
-    loss_new.backward()
-    grads_new = [p.grad for p in model_new.parameters()]
-    grad_ratio_new = torch.std(grads_new[0]) / torch.std(grads_new[-1])
-
-    # Deepest layer gradient should be much smaller than before
-    assert grad_ratio_new < 0.5 * grad_ratio
-
-
 def test_slayer_vs_sinabs_compare():
-    import torch
-    import time
-
     num_timesteps = 500
     n_channels = 16
     batch_size = 100
     n_classes = 10
-    tau_mem = 10
+    tau_mem = 10.
     device = "cuda:0"
 
     # Define inputs
@@ -363,14 +296,11 @@ def test_slayer_vs_sinabs_compare():
 
 
 def test_slayer_vs_sinabs_compare_thr_low():
-    import torch
-    import time
-
     num_timesteps = 500
     n_channels = 16
     batch_size = 100
     n_classes = 10
-    tau_mem = 10
+    tau_mem = 10.
     device = "cuda:0"
 
     # Define inputs
@@ -465,14 +395,11 @@ def test_slayer_vs_sinabs_compare_thr_low():
 
 
 def test_slayer_vs_sinabs_compare_thr_low_reset():
-    import torch
-    import time
-
     num_timesteps = 500
     n_channels = 16
     batch_size = 100
     n_classes = 10
-    tau_mem = 10
+    tau_mem = 10.
     device = "cuda:0"
 
     # Define inputs

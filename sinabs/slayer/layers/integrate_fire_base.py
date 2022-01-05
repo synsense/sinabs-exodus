@@ -1,8 +1,5 @@
 from typing import Callable, Optional, Tuple
-
 import torch
-from sinabs import activation
-
 from sinabs.slayer.spike import SpikeFunctionIterForward
 from sinabs.layers import StatefulLayer
 from sinabs.activation import ActivationFunction, MultiSpike, MembraneSubtract, Heaviside

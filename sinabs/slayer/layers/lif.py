@@ -1,7 +1,8 @@
 import torch
+import sinabs.activation as sina
 from sinabs.slayer.layers import IntegrateFireBase
 from sinabs.layers import SqueezeMixin
-from typing import Optional
+from typing import Callable, Optional, Union
 
 
 __all__ = ["LIF", "LIFSqueeze"]
@@ -10,58 +11,42 @@ __all__ = ["LIF", "LIFSqueeze"]
 class LIF(IntegrateFireBase):
     def __init__(
         self,
-        tau_mem: float,
-        threshold: float = 1.0,
+        tau_mem: Union[float, torch.Tensor],
+        tau_syn: Optional[Union[float, torch.Tensor]] = None,
+        activation_fn: Callable = sina.ActivationFunction(),
         threshold_low: Optional[float] = None,
-        membrane_subtract: Optional[float] = None,
-        window: float = 1.0,
-        scale_grads: float = 1.0,
+        train_alphas: bool = False,
+        shape: Optional[torch.Size] = None,
         record: bool = True,
-        membrane_reset=False,
-        *args,
-        **kwargs,
     ):
         """
         Slayer implementation of a spiking, LIF neuron with learning enabled.
         Does not simulate synaptic dynamics.
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         tau_mem: float
-            Membrane time constant.
-        threshold: float
-            Spiking threshold of the neuron.
-        threshold_low: Optional[float]
-            Lower bound for membrane potential.
-        membrane_subtract: Optional[float]
-            Constant to be subtracted from membrane potential when neuron spikes.
-            If ``None`` (default): Same as ``threshold``.
-        window: float
-            Distance between step of Heaviside surrogate gradient and threshold.
-        scale_grads: float
-            Scale surrogate gradients in backpropagation.
+            Membrane potential time constant.
+        tau_syn: float
+            Synaptic decay time constants. If None, no synaptic dynamics are used, which is the default.
+        activation_fn: Callable
+            a sinabs.activation.ActivationFunction to provide spiking and reset mechanism. Also defines a surrogate gradient.
+        threshold_low: float or None
+            Lower bound for membrane potential v_mem, clipped at every time step.
+        train_alphas: bool
+            When True, the discrete decay factor exp(-1/tau) is used for training rather than tau itself. 
+        shape: torch.Size
+            Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
         record: bool
             Record membrane potential and spike output during forward call.
-        membrane_reset: bool
-            Currently not supported.
         """
 
-        # if dt <= 0:
-        #     raise ValueError("`dt` must be greater than 0.")
-        # if tau_mem < dt:
-        #     raise ValueError("`tau_mem` must be greater than `dt`.")
-
-        # self.dt = dt
-        # tau_mem = tau_mem
-
         super().__init__(
-            threshold=threshold,
-            threshold_low=threshold_low,
-            membrane_subtract=membrane_subtract,
-            window=window,
-            scale_grads=scale_grads,
             alpha_mem=torch.exp(-torch.tensor(1.0 / tau_mem)).item(),
-            membrane_reset=membrane_reset,
+            activation_fn=activation_fn,
+            threshold_low=threshold_low,
+            shape=shape,
+            record=record,
         )
 
     @property

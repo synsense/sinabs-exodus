@@ -209,59 +209,6 @@ def test_slayer_model_batch():
     assert out.shape == (num_timesteps * batch_size, n_classes)
 
 
-def test_gradient_scaling():
-    torch.manual_seed(0)
-    num_timesteps = 100
-    n_channels = 16
-    batch_size = 1
-    n_classes = 2
-    device = "cuda:0"
-    model = build_slayer_model(
-        n_channels=n_channels,
-        n_classes=n_classes,
-        num_timesteps=num_timesteps,
-        threshold=0.1,
-        threshold_low=-0.1,
-    ).to(device)
-    initial_weights = [p.data.clone() for p in model.parameters()]
-    input_data = torch.rand((num_timesteps * batch_size, n_channels)).to(device)
-
-    out = model(input_data).cpu()
-    loss = torch.nn.functional.mse_loss(out, torch.ones_like(out))
-    loss.backward()
-    grads = [p.grad for p in model.parameters()]
-    # Calculate ratio of std of first and last layer gradients
-    grad_ratio = torch.std(grads[0]) / torch.std(grads[-1])
-
-    # Generate identical model, except for gradient scaling
-    model_new = build_slayer_model(
-        n_channels=n_channels,
-        n_classes=n_classes,
-        num_timesteps=num_timesteps,
-        threshold=0.1,
-        threshold_low=-0.1,
-    ).to(device)
-    for p_new, p_old in zip(model_new.parameters(), initial_weights):
-        p_new.data = p_old.clone()
-
-    out_new = model_new(input_data).cpu()
-    # Make sure output is the same as for original model
-    assert (out_new == out).all()
-
-    # Compare gradient ratios
-    loss_new = torch.nn.functional.mse_loss(out_new, torch.ones_like(out))
-
-    # Make sure loss is the same as for original model
-    assert (loss_new == loss).all()
-
-    loss_new.backward()
-    grads_new = [p.grad for p in model_new.parameters()]
-    grad_ratio_new = torch.std(grads_new[0]) / torch.std(grads_new[-1])
-
-    # Deepest layer gradient should be much smaller than before
-    assert grad_ratio_new < 0.5 * grad_ratio
-
-
 def test_slayer_vs_sinabs_compare():
     num_timesteps = 500
     n_channels = 16
