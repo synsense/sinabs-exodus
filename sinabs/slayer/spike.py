@@ -268,8 +268,3 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             None,
             None,
         )
-
-
-spikeFunction = SpikeFunction().apply
-spikeFunctionLB = SpikeFunctionLB().apply
-spikeFunctionIterForward = SpikeFunctionIterForward().apply

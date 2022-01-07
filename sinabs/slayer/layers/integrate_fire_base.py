@@ -52,7 +52,7 @@ class IntegrateFireBase(StatefulLayer):
             raise ValueError("`alpha_mem` must be between 0 and 1.")
 
         super().__init__(
-            state_names=['v_mem']
+            state_names=['v_mem', 'activations']
         )
 
         self.threshold = activation_fn.spike_threshold
@@ -62,9 +62,6 @@ class IntegrateFireBase(StatefulLayer):
         self.learning_window = activation_fn.surrogate_grad_fn.window * activation_fn.spike_threshold
         self.alpha_mem = alpha_mem
         self.record = record
-
-        # - Make sure buffers and parameters are on cuda
-        self.cuda()
 
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
@@ -88,7 +85,6 @@ class IntegrateFireBase(StatefulLayer):
         # Ensure the neuron state are initialized
         if not self.is_state_initialised() or not self.state_has_shape((n_batches, *n_neurons)):
             self.init_state_with_shape((n_batches, *n_neurons))
-            self.activations = torch.zeros((n_batches, *n_neurons), device=spike_input.device)
 
         # Move time to last dimension -> (n_batches, *neuron_shape, num_timesteps)
         spike_input = spike_input.movedim(1, -1)
