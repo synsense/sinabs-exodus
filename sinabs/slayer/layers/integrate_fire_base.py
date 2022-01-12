@@ -2,7 +2,12 @@ from typing import Callable, Optional
 import torch
 from sinabs.slayer.spike import SpikeFunctionIterForward
 from sinabs.layers import StatefulLayer
-from sinabs.activation import ActivationFunction, MultiSpike, MembraneSubtract, Heaviside
+from sinabs.activation import (
+    ActivationFunction,
+    MultiSpike,
+    MembraneSubtract,
+    Heaviside,
+)
 
 
 __all__ = ["IntegrateFireBase"]
@@ -43,23 +48,27 @@ class IntegrateFireBase(StatefulLayer):
             Record membrane potential and spike output during forward call. Default is False.
         """
 
-        if activation_fn.spike_fn != MultiSpike \
-             and not isinstance(activation_fn.reset_fn, MembraneSubtract) \
-                 and not isinstance(activation_fn.surrogate_grad_fn, Heaviside):
-            raise NotImplementedError("Spike mechanism config not supported. Use MultiSpike, MembraneSubtract and Heaviside surrogate grad functions.")
-        
+        if (
+            activation_fn.spike_fn != MultiSpike
+            and not isinstance(activation_fn.reset_fn, MembraneSubtract)
+            and not isinstance(activation_fn.surrogate_grad_fn, Heaviside)
+        ):
+            raise NotImplementedError(
+                "Spike mechanism config not supported. Use MultiSpike, MembraneSubtract and Heaviside surrogate grad functions."
+            )
+
         if not (0 < alpha_mem <= 1.0):
             raise ValueError("`alpha_mem` must be between 0 and 1.")
 
-        super().__init__(
-            state_names=['v_mem', 'activations']
-        )
+        super().__init__(state_names=["v_mem", "activations"])
 
         self.threshold = activation_fn.spike_threshold
         self.threshold_low = threshold_low
         self.membrane_subtract = activation_fn.spike_threshold
-        self.scale_grads = 1.
-        self.learning_window = activation_fn.surrogate_grad_fn.window * activation_fn.spike_threshold
+        self.scale_grads = 1.0
+        self.learning_window = (
+            activation_fn.surrogate_grad_fn.window * activation_fn.spike_threshold
+        )
         self.alpha_mem = alpha_mem
         self.record_v_mem = record_v_mem
         if shape:
@@ -85,7 +94,9 @@ class IntegrateFireBase(StatefulLayer):
         n_batches, num_timesteps, *n_neurons = spike_input.shape
 
         # Ensure the neuron state are initialized
-        if not self.is_state_initialised() or not self.state_has_shape((n_batches, *n_neurons)):
+        if not self.is_state_initialised() or not self.state_has_shape(
+            (n_batches, *n_neurons)
+        ):
             self.init_state_with_shape((n_batches, *n_neurons))
 
         # Move time to last dimension -> (n_batches, *neuron_shape, num_timesteps)
@@ -113,7 +124,7 @@ class IntegrateFireBase(StatefulLayer):
 
         # update neuron states
         self.v_mem = v_mem_full[:, -1].clone()
- 
+
         return output_spikes
 
     @property

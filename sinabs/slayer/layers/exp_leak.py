@@ -64,18 +64,20 @@ class ExpLeak(ExpLeakSinabs):
 
 class ExpLeakSqueeze(ExpLeak, SqueezeMixin):
     """
-    Same as parent class, only takes in squeezed 4D input (Batch*Time, Channel, Height, Width) 
+    Same as parent class, only takes in squeezed 4D input (Batch*Time, Channel, Height, Width)
     instead of 5D input (Batch, Time, Channel, Height, Width) in order to be compatible with
-    layers that can only take a 4D input, such as convolutional and pooling layers. 
+    layers that can only take a 4D input, such as convolutional and pooling layers.
     """
-    def __init__(self,
-                 batch_size = None,
-                 num_timesteps = None,
-                 **kwargs,
-                ):
+
+    def __init__(
+        self,
+        batch_size=None,
+        num_timesteps=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.squeeze_init(batch_size, num_timesteps)
-    
+
     def forward(self, input_data: torch.Tensor) -> torch.Tensor:
         return self.squeeze_forward(input_data, super().forward)
 

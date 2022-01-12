@@ -58,7 +58,7 @@ class SpikeFunction(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        membr_pot, = ctx.saved_tensors
+        (membr_pot,) = ctx.saved_tensors
 
         # Heaviside surrogate gradients
         surrogates = (membr_pot >= (ctx.threshold - ctx.window)).float() / ctx.threshold
@@ -131,7 +131,7 @@ class SpikeFunctionLB(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        membr_pot, = ctx.saved_tensors
+        (membr_pot,) = ctx.saved_tensors
 
         # Heaviside surrogate gradients
         surrogates = (membr_pot >= (ctx.threshold - ctx.window)).float() / ctx.threshold
@@ -173,7 +173,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         alpha : float
             State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
         state : torch.Tensor
-            1D shape (N,).  Initial states. Has to be contiguous. 
+            1D shape (N,).  Initial states. Has to be contiguous.
         activations : torch.tensor
             1D, shape (N,). Activations from previous time step.
             Has to be contiguous.
@@ -231,7 +231,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output, grad_state):
-        states, = ctx.saved_tensors
+        (states,) = ctx.saved_tensors
 
         # Heaviside surrogate gradients
         surrogates = (states >= (ctx.threshold - ctx.window)).float() / ctx.threshold
