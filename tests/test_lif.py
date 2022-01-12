@@ -7,8 +7,8 @@ import sinabs.layers as sl
 import sinabs.activation as sa
 
 
-atol = 1e-3
-rtol = 1e-3
+atol = 1e-2
+rtol = 1e-2
 
 
 def test_lif_basic():
