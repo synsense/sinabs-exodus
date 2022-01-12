@@ -6,10 +6,10 @@ def generateEpsp(
     input_spikes: "torch.tensor", epsp_kernel: "torch.tensor"
 ) -> "torch.tensor":
     if epsp_kernel.ndim == 1:
-        return psp_function(input_spikes, epsp_kernel)
+        return PspFunction.apply(input_spikes, epsp_kernel)
 
     if epsp_kernel.ndim == 2:
-        out = [psp_function(s, k) for s, k in zip(input_spikes, epsp_kernel)]
+        out = [PspFunction.apply(s, k) for s, k in zip(input_spikes, epsp_kernel)]
         return torch.stack(out)
 
 
@@ -63,6 +63,3 @@ class PspFunction(torch.autograd.Function):
             gradFilter = kernel
 
         return gradInput, gradFilter
-
-
-psp_function = PspFunction().apply

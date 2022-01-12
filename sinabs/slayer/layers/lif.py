@@ -17,7 +17,7 @@ class LIF(IntegrateFireBase):
         threshold_low: Optional[float] = None,
         train_alphas: bool = False,
         shape: Optional[torch.Size] = None,
-        record: bool = True,
+        record_v_mem: bool = True,
     ):
         """
         Slayer implementation of a spiking, LIF neuron with learning enabled.
@@ -37,16 +37,16 @@ class LIF(IntegrateFireBase):
             When True, the discrete decay factor exp(-1/tau) is used for training rather than tau itself. 
         shape: torch.Size
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
-        record: bool
+        record_v_mem: bool
             Record membrane potential and spike output during forward call.
         """
 
         super().__init__(
-            alpha_mem=torch.exp(-torch.tensor(1.0 / tau_mem)).item(),
+            alpha_mem=torch.exp(-torch.as_tensor(1.0 / tau_mem)).item(),
             activation_fn=activation_fn,
             threshold_low=threshold_low,
             shape=shape,
-            record=record,
+            record_v_mem=record_v_mem,
         )
 
     @property

@@ -14,7 +14,7 @@ class IAF(IntegrateFireBase):
         activation_fn: Callable = ActivationFunction(),
         threshold_low: Optional[float] = None,
         shape: Optional[torch.Size] = None,
-        record: bool = False,
+        record_v_mem: bool = False,
     ):
         """
         Slayer implementation of a spiking, non-leaky, IAF neuron with learning enabled.
@@ -27,7 +27,7 @@ class IAF(IntegrateFireBase):
             Lower bound for membrane potential v_mem, clipped at every time step.
         shape: torch.Size
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
-        record: bool
+        record_v_mem: bool
             Record membrane potential and spike output during forward call. Default is False.
         """
 
@@ -36,7 +36,7 @@ class IAF(IntegrateFireBase):
             activation_fn=activation_fn,
             threshold_low=threshold_low,
             shape=shape,
-            record=record,
+            record_v_mem=record_v_mem,
         )
 
     @property
