@@ -6,7 +6,7 @@
 #ifndef SPIKEKERNELS_H_INCLUDED
 #define SPIKEKERNELS_H_INCLUDED
 
-
+#include <stdio.h>
 /**
  * Forward evolution for a single IAF or LIF neuron, over time. Including state decay,
  * spike generation and subtract mechanism. No synaptic dynamics.
@@ -51,9 +51,6 @@ __global__ void lifForwardKernel(
 	int activation = int(activationsPrev[neuronID]);
 
 	for(unsigned t=0; t<Ns; ++t){
-		// Subtract previous spikes
-		vmemCurr -= activation * membrSubtract;
-
 		// Decay state
 		vmemCurr *= alpha;
 
@@ -68,9 +65,6 @@ __global__ void lifForwardKernel(
 			vmemCurr = thetaLow;
 		}
 
-		// Write current vmemCurr into tensor
-		vmemAll[linearID] = vmemCurr;
-
 		// Generate spikes
 		if(vmemCurr >= theta){
 			activation = vmemCurr / theta;
@@ -79,7 +73,13 @@ __global__ void lifForwardKernel(
 		}
 
 		// Write activation into tensor
-		outputSpikes[linearID] = 1.0f * activation;
+		outputSpikes[linearID] = static_cast<float>(activation);
+
+		// Subtract spikes
+		vmemCurr -= activation * membrSubtract;
+
+		// Write current vmemCurr into tensor
+		vmemAll[linearID] = vmemCurr;
 	}
 
 }
