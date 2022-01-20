@@ -156,7 +156,8 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         threshold: float,
         threshold_low: float,
         window: float = 1.0,
-        scale_rho=1.0,
+        scale_rho: bool = 1.0,
+        multiple_spikes: bool = True,
     ):
         """
         Generate spikes and apply refractory response to membrane potential.
@@ -185,6 +186,8 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             Width of the surrogate gradient exponential.
         scale_rho: float
             Scales the surrogate gradients.
+        multiple_spikes: bool
+            Can a neuron emit multiple spikes per time step?
 
         Returns
         -------
@@ -217,6 +220,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             threshold,
             threshold_low if threshold_low is not None else 0,
             threshold_low is not None,
+            multiple_spikes,
         )
 
         ctx.threshold = threshold

@@ -194,7 +194,8 @@ void lifForwardCuda(
     float alpha,
 	float theta,
 	float thetaLow,
-	bool applyThetaLow)
+	bool applyThetaLow,
+	bool multipleSpikes)
 {
 	CHECK_INPUT(input);
 	CHECK_INPUT(outputSpikes);
@@ -225,7 +226,7 @@ void lifForwardCuda(
 		input.data_ptr<float>(),
 		vmemInitial.data_ptr<float>(),
 		activationsPrev.data_ptr<float>(),
-		membrSubtract, alpha, theta, thetaLow, applyThetaLow, nNeurons, Ns);
+		membrSubtract, alpha, theta, thetaLow, applyThetaLow, multipleSpikes, nNeurons, Ns);
 
 	return;
 }   
