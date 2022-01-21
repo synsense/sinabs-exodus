@@ -236,7 +236,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         (states,) = ctx.saved_tensors
 
         # Surrogate gradients
-        surrogates = ctx.surrogate_grad_fn(states)
+        surrogates = ctx.surrogate_grad_fn(states, ctx.threshold)
 
         # Gradient becomes 0 where states is clipped to lower threshold
         if ctx.threshold_low is None:
@@ -259,14 +259,4 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         # with surrogates in spikeGradsFull and passing surrogates * grad_output + grad_states
         # instead of grad_output.
 
-        return (
-            ctx.scale_rho * grad_input,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        )
+        return (grad_input, None, None, None, None, None, None, None, None)
