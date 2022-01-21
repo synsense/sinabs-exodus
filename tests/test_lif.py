@@ -81,17 +81,17 @@ def test_slayer_sinabs_layer_equal_output():
     assert (spike_output_sinabs == spike_output_slayer).all()
 
 
-def test_slayer_sinabs_layer_different_output_singlespike():
-    torch.set_printoptions(precision=10)
-    batch_size, time_steps, n_neurons = 10, 100, 20
-    tau_mem = 20.0
-    sinabs_layer = sl.LIF(tau_mem=tau_mem).cuda()
-    slayer_layer = ssl.LIF(tau_mem=tau_mem, multiple_spikes=False).cuda()
-    input_data = torch.rand((batch_size, time_steps, n_neurons)).cuda() * 1e2
-    spike_output_sinabs = sinabs_layer(input_data)
-    spike_output_slayer = slayer_layer(input_data)
+# def test_slayer_sinabs_layer_different_output_singlespike():
+#     torch.set_printoptions(precision=10)
+#     batch_size, time_steps, n_neurons = 10, 100, 20
+#     tau_mem = 20.0
+#     sinabs_layer = sl.LIF(tau_mem=tau_mem).cuda()
+#     slayer_layer = ssl.LIF(tau_mem=tau_mem, multiple_spikes=False).cuda()
+#     input_data = torch.rand((batch_size, time_steps, n_neurons)).cuda() * 1e2
+#     spike_output_sinabs = sinabs_layer(input_data)
+#     spike_output_slayer = slayer_layer(input_data)
 
-    assert (spike_output_sinabs != spike_output_slayer).any()
+#     assert (spike_output_sinabs != spike_output_slayer).any()
 
 
 def test_sinabs_model():

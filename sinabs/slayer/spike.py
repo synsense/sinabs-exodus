@@ -1,3 +1,5 @@
+from typing import Callable
+
 import torch
 import sinabsslayerCuda
 
@@ -155,8 +157,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         activations: torch.tensor,
         threshold: float,
         threshold_low: float,
-        window: float = 1.0,
-        scale_rho: bool = 1.0,
+        surrogate_grad_fn: Callable,
         multiple_spikes: bool = True,
     ):
         """
@@ -182,10 +183,8 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             Firing threshold
         threshold_low: float
             Lower limit for membr_pot
-        tau_rho: float
-            Width of the surrogate gradient exponential.
-        scale_rho: float
-            Scales the surrogate gradients.
+        surrogate_grad_fn: Callable
+            Calculates surrogate gradients as function of membr_pot
         multiple_spikes: bool
             Can a neuron emit multiple spikes per time step?
 
@@ -225,8 +224,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
 
         ctx.threshold = threshold
         ctx.threshold_low = threshold_low
-        ctx.scale_rho = scale_rho
-        ctx.window = window or threshold
+        ctx.surrogate_grad_fn = surrogate_grad_fn
         ctx.membrane_subtract = membrane_subtract
         ctx.alpha = alpha
         ctx.save_for_backward(vmem)
@@ -237,8 +235,8 @@ class SpikeFunctionIterForward(torch.autograd.Function):
     def backward(ctx, grad_output, grad_state):
         (states,) = ctx.saved_tensors
 
-        # Heaviside surrogate gradients
-        surrogates = (states >= (ctx.threshold - ctx.window)).float() / ctx.threshold
+        # Surrogate gradients
+        surrogates = ctx.surrogate_grad_fn(states)
 
         # Gradient becomes 0 where states is clipped to lower threshold
         if ctx.threshold_low is None:
@@ -263,7 +261,6 @@ class SpikeFunctionIterForward(torch.autograd.Function):
 
         return (
             ctx.scale_rho * grad_input,
-            None,
             None,
             None,
             None,

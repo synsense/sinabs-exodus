@@ -16,7 +16,6 @@ class LIF(IntegrateFireBase):
         threshold_low: Optional[float] = None,
         shape: Optional[torch.Size] = None,
         record_v_mem: bool = True,
-        multiple_spikes: bool = True,
     ):
         """
         Slayer implementation of a spiking Leaky Integrate and Fire neuron.
@@ -34,8 +33,6 @@ class LIF(IntegrateFireBase):
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
         record_v_mem: bool
             Record membrane potential and spike output during forward call.
-        multiple_spikes: bool
-            Allow a neuron to emit multiple spikes per time step.
         """
 
         super().__init__(
@@ -44,7 +41,6 @@ class LIF(IntegrateFireBase):
             threshold_low=threshold_low,
             shape=shape,
             record_v_mem=record_v_mem,
-            multiple_spikes=multiple_spikes,
         )
 
     @property

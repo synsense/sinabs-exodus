@@ -1,12 +1,13 @@
 from typing import Callable, Optional
+from copy import deepcopy
 import torch
 from sinabs.slayer.spike import SpikeFunctionIterForward
 from sinabs.layers import StatefulLayer
 from sinabs.activation import (
     ActivationFunction,
     MultiSpike,
+    SingleSpike,
     MembraneSubtract,
-    Heaviside,
 )
 
 
@@ -28,7 +29,6 @@ class IntegrateFireBase(StatefulLayer):
         threshold_low: Optional[float] = None,
         shape: Optional[torch.Size] = None,
         record_v_mem: bool = False,
-        multiple_spikes: bool = True,
     ):
         """
         Slayer implementation of a leaky or non-leaky integrate and fire neuron with
@@ -47,17 +47,13 @@ class IntegrateFireBase(StatefulLayer):
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
         record_v_mem: bool
             Record membrane potential and spike output during forward call. Default is False.
-        multiple_spikes: bool
-            Allow a neuron to emit multiple spikes per time step.
         """
 
-        if (
-            activation_fn.spike_fn != MultiSpike
-            and not isinstance(activation_fn.reset_fn, MembraneSubtract)
-            and not isinstance(activation_fn.surrogate_grad_fn, Heaviside)
+        if activation_fn.spike_fn not in (MultiSpike, SingleSpike) or not isinstance(
+            activation_fn.reset_fn, MembraneSubtract
         ):
             raise NotImplementedError(
-                "Spike mechanism config not supported. Use MultiSpike, MembraneSubtract and Heaviside surrogate grad functions."
+                "Spike mechanism config not supported. Use MultiSpike/SingleSpike and MembraneSubtract functions."
             )
 
         if not (0 < alpha_mem <= 1.0):
@@ -68,16 +64,13 @@ class IntegrateFireBase(StatefulLayer):
         self.threshold = activation_fn.spike_threshold
         self.threshold_low = threshold_low
         self.membrane_subtract = activation_fn.spike_threshold
-        self.scale_grads = 1.0
-        self.learning_window = (
-            activation_fn.surrogate_grad_fn.window * activation_fn.spike_threshold
-        )
+        self.surrogate_grad_fn = activation_fn.surrogate_grad_fn
         self.alpha_mem = alpha_mem
         self.record_v_mem = record_v_mem
         if shape:
             self.init_state_with_shape(shape)
 
-        self.multiple_spikes = multiple_spikes
+        self.multiple_spikes = activation_fn.spike_fn == MultiSpike
 
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
@@ -116,8 +109,7 @@ class IntegrateFireBase(StatefulLayer):
             self.activations.flatten(),
             self.threshold,
             self.threshold_low,
-            self.learning_window,
-            self.scale_grads,
+            self.surrogate_grad_fn,
             self.multiple_spikes,
         )
 
@@ -137,11 +129,9 @@ class IntegrateFireBase(StatefulLayer):
     def _param_dict(self) -> dict:
         param_dict = super()._param_dict
         param_dict.update(
-            scale_grads=self.scale_grads,
-            window=self.learning_window / self.threshold,
             alpha_mem=self.alpha_mem,
             record=self.record,
-            multiple_spikes=self.multiple_spikes,
+            activation_fn=deepcopy(self.activation_fn),
         )
 
         return param_dict
