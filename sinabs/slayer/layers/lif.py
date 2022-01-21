@@ -18,6 +18,7 @@ class LIF(IntegrateFireBase):
         train_alphas: bool = False,
         shape: Optional[torch.Size] = None,
         record_v_mem: bool = True,
+        multiple_spikes: bool = True,
     ):
         """
         Slayer implementation of a spiking, LIF neuron with learning enabled.
@@ -39,6 +40,8 @@ class LIF(IntegrateFireBase):
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
         record_v_mem: bool
             Record membrane potential and spike output during forward call.
+        multiple_spikes: bool
+            Allow a neuron to emit multiple spikes per time step.
         """
 
         super().__init__(
@@ -47,6 +50,7 @@ class LIF(IntegrateFireBase):
             threshold_low=threshold_low,
             shape=shape,
             record_v_mem=record_v_mem,
+            multiple_spikes=multiple_spikes,
         )
 
     @property
@@ -79,12 +83,7 @@ class LIFSqueeze(LIF, SqueezeMixin):
     layers that can only take a 4D input, such as convolutional and pooling layers.
     """
 
-    def __init__(
-        self,
-        batch_size=None,
-        num_timesteps=None,
-        **kwargs,
-    ):
+    def __init__(self, batch_size=None, num_timesteps=None, **kwargs):
         super().__init__(**kwargs)
         self.squeeze_init(batch_size, num_timesteps)
 

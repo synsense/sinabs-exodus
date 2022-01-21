@@ -66,7 +66,6 @@ def test_state_reset():
 def test_slayer_sinabs_layer_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
-    tau_mem = 20.0
     sinabs_model = sl.IAF().cuda()
     slayer_model = ssl.IAF().cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
@@ -78,6 +77,19 @@ def test_slayer_sinabs_layer_equal_output():
     assert spike_output_sinabs.sum() > 0
     assert spike_output_sinabs.sum() == spike_output_slayer.sum()
     assert (spike_output_sinabs == spike_output_slayer).all()
+
+
+def test_slayer_sinabs_layer_different_output_singlespike():
+    batch_size, time_steps = 10, 100
+    n_input_channels = 16
+    sinabs_model = sl.IAF().cuda()
+    slayer_model = ssl.IAF(multiple_spikes=False).cuda()
+    input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
+    input_data[:, :10] = 1e4
+    spike_output_sinabs = sinabs_model(input_data)
+    spike_output_slayer = slayer_model(input_data)
+
+    assert (spike_output_sinabs != spike_output_slayer).any()
 
 
 def test_sinabs_model():
@@ -194,10 +206,7 @@ class SinabsIAFModel(nn.Sequential):
             nn.Linear(16, 32, bias=False),
             sl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(32, n_output_classes, bias=False),
-            sl.IAF(
-                activation_fn=act_fn,
-                threshold_low=threshold_low,
-            ),
+            sl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
         )
 
     def reset_states(self):
@@ -228,20 +237,11 @@ class SlayerIAFModel(nn.Sequential):
         act_fn = sa.ActivationFunction(spike_threshold=threshold)
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            ssl.IAF(
-                activation_fn=act_fn,
-                threshold_low=threshold_low,
-            ),
+            ssl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(16, 32, bias=False),
-            ssl.IAF(
-                activation_fn=act_fn,
-                threshold_low=threshold_low,
-            ),
+            ssl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(32, n_output_classes, bias=False),
-            ssl.IAF(
-                activation_fn=act_fn,
-                threshold_low=threshold_low,
-            ),
+            ssl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
         )
 
     def reset_states(self):

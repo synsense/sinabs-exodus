@@ -28,6 +28,7 @@ class IntegrateFireBase(StatefulLayer):
         threshold_low: Optional[float] = None,
         shape: Optional[torch.Size] = None,
         record_v_mem: bool = False,
+        multiple_spikes: bool = True,
     ):
         """
         Slayer implementation of a leaky or non-leaky integrate and fire neuron with
@@ -46,6 +47,8 @@ class IntegrateFireBase(StatefulLayer):
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
         record_v_mem: bool
             Record membrane potential and spike output during forward call. Default is False.
+        multiple_spikes: bool
+            Allow a neuron to emit multiple spikes per time step.
         """
 
         if (
@@ -73,6 +76,8 @@ class IntegrateFireBase(StatefulLayer):
         self.record_v_mem = record_v_mem
         if shape:
             self.init_state_with_shape(shape)
+
+        self.multiple_spikes = multiple_spikes
 
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
@@ -113,6 +118,7 @@ class IntegrateFireBase(StatefulLayer):
             self.threshold_low,
             self.learning_window,
             self.scale_grads,
+            self.multiple_spikes,
         )
 
         # Reshape output spikes and v_mem_full, store neuron states
@@ -135,6 +141,7 @@ class IntegrateFireBase(StatefulLayer):
             window=self.learning_window / self.threshold,
             alpha_mem=self.alpha_mem,
             record=self.record,
+            multiple_spikes=self.multiple_spikes,
         )
 
         return param_dict

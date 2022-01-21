@@ -271,4 +271,5 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             None,
             None,
             None,
+            None,
         )

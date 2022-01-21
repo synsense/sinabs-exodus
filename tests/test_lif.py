@@ -81,6 +81,19 @@ def test_slayer_sinabs_layer_equal_output():
     assert (spike_output_sinabs == spike_output_slayer).all()
 
 
+def test_slayer_sinabs_layer_different_output_singlespike():
+    torch.set_printoptions(precision=10)
+    batch_size, time_steps, n_neurons = 10, 100, 20
+    tau_mem = 20.0
+    sinabs_layer = sl.LIF(tau_mem=tau_mem).cuda()
+    slayer_layer = ssl.LIF(tau_mem=tau_mem, multiple_spikes=False).cuda()
+    input_data = torch.rand((batch_size, time_steps, n_neurons)).cuda() * 1e2
+    spike_output_sinabs = sinabs_layer(input_data)
+    spike_output_slayer = slayer_layer(input_data)
+
+    assert (spike_output_sinabs != spike_output_slayer).any()
+
+
 def test_sinabs_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
@@ -203,11 +216,7 @@ class SinabsLIFModel(nn.Sequential):
             nn.Linear(16, 32, bias=False),
             sl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(32, n_output_classes, bias=False),
-            sl.LIF(
-                tau_mem=tau_mem,
-                activation_fn=act_fn,
-                threshold_low=threshold_low,
-            ),
+            sl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
         )
 
     def reset_states(self):
@@ -239,23 +248,11 @@ class SlayerLIFModel(nn.Sequential):
         act_fn = sa.ActivationFunction(spike_threshold=threshold)
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            ssl.LIF(
-                tau_mem=tau_mem,
-                activation_fn=act_fn,
-                threshold_low=threshold_low,
-            ),
+            ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(16, 32, bias=False),
-            ssl.LIF(
-                tau_mem=tau_mem,
-                activation_fn=act_fn,
-                threshold_low=threshold_low,
-            ),
+            ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(32, n_output_classes, bias=False),
-            ssl.LIF(
-                tau_mem=tau_mem,
-                activation_fn=act_fn,
-                threshold_low=threshold_low,
-            ),
+            ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
         )
 
     def reset_states(self):
