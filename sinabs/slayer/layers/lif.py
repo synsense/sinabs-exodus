@@ -12,30 +12,24 @@ class LIF(IntegrateFireBase):
     def __init__(
         self,
         tau_mem: Union[float, torch.Tensor],
-        tau_syn: Optional[Union[float, torch.Tensor]] = None,
         activation_fn: Callable = sina.ActivationFunction(),
         threshold_low: Optional[float] = None,
-        train_alphas: bool = False,
         shape: Optional[torch.Size] = None,
         record_v_mem: bool = True,
         multiple_spikes: bool = True,
     ):
         """
-        Slayer implementation of a spiking, LIF neuron with learning enabled.
+        Slayer implementation of a spiking Leaky Integrate and Fire neuron.
         Does not simulate synaptic dynamics.
 
         Parameters
         ----------
         tau_mem: float
             Membrane potential time constant.
-        tau_syn: float
-            Synaptic decay time constants. If None, no synaptic dynamics are used, which is the default.
         activation_fn: Callable
             a sinabs.activation.ActivationFunction to provide spiking and reset mechanism. Also defines a surrogate gradient.
         threshold_low: float or None
             Lower bound for membrane potential v_mem, clipped at every time step.
-        train_alphas: bool
-            When True, the discrete decay factor exp(-1/tau) is used for training rather than tau itself.
         shape: torch.Size
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
         record_v_mem: bool
@@ -45,7 +39,7 @@ class LIF(IntegrateFireBase):
         """
 
         super().__init__(
-            alpha_mem=torch.exp(-torch.as_tensor(1.0 / tau_mem)).item(),
+            alpha_mem=torch.exp(torch.as_tensor(-1.0 / tau_mem)).item(),
             activation_fn=activation_fn,
             threshold_low=threshold_low,
             shape=shape,
