@@ -49,9 +49,8 @@ class IntegrateFireBase(StatefulLayer):
             Record membrane potential and spike output during forward call. Default is False.
         """
 
-        if (
-            activation_fn.spike_fn not in (MultiSpike, SingleSpike)
-            or activation_fn.reset_fn != MembraneSubtract
+        if activation_fn.spike_fn not in (MultiSpike, SingleSpike) or not isinstance(
+            activation_fn.reset_fn, MembraneSubtract
         ):
             raise NotImplementedError(
                 "Spike mechanism config not supported. Use MultiSpike/SingleSpike and MembraneSubtract functions."
