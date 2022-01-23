@@ -35,10 +35,13 @@ class ExpLeak(ExpLeakSinabs):
             ExpLeak layer states. Same shape as `input_current`
         """
 
-        # Ensure the neuron states are initialized
-        shape_without_time = (input_current.shape[0], *input_current.shape[2:])
-        if self.v_mem.shape != shape_without_time:
-            self.reset_states(shape=shape_without_time, randomize=False)
+        batch_size, time_steps, *trailing_dim = input_current.shape
+
+        # Ensure the neuron state are initialized
+        if not self.is_state_initialised() or not self.state_has_shape(
+            (batch_size, *trailing_dim)
+        ):
+            self.init_state_with_shape((batch_size, *trailing_dim))
 
         # Determine no. of time steps from input
         time_steps = input_current.shape[1]
@@ -48,11 +51,11 @@ class ExpLeak(ExpLeakSinabs):
 
         # Actual evolution of states
         states = LeakyIntegrator.apply(
-            input_2d, self.v_mem.flatten().contiguous(), self.alpha
+            input_2d, self.v_mem.flatten().contiguous(), self.alpha_leak_calculated
         )
 
         # Reshape states to original shape -> (Batch, Time, ...)
-        states = states.reshape(*shape_without_time, time_steps).movedim(-1, 1)
+        states = states.reshape(*(batch_size, *trailing_dim), time_steps).movedim(-1, 1)
 
         # Store current state based on last evolution time step
         self.v_mem = states[:, -1, ...].clone()
@@ -69,12 +72,7 @@ class ExpLeakSqueeze(ExpLeak, SqueezeMixin):
     layers that can only take a 4D input, such as convolutional and pooling layers.
     """
 
-    def __init__(
-        self,
-        batch_size=None,
-        num_timesteps=None,
-        **kwargs,
-    ):
+    def __init__(self, batch_size=None, num_timesteps=None, **kwargs):
         super().__init__(**kwargs)
         self.squeeze_init(batch_size, num_timesteps)
 
