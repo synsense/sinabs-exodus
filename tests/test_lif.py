@@ -81,7 +81,7 @@ def test_slayer_sinabs_layer_equal_output():
     assert (spike_output_sinabs == spike_output_slayer).all()
 
 
-def test_slayer_sinabs_layer_different_output_singlespike():
+def test_slayer_sinabs_layer_equal_output_singlespike():
     torch.set_printoptions(precision=10)
     batch_size, time_steps, n_neurons = 10, 100, 20
     tau_mem = 20.0
@@ -102,8 +102,13 @@ def test_sinabs_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
+    tau_leak = 10
+
     model = SinabsLIFModel(
-        tau_mem, n_input_channels=n_input_channels, n_output_classes=n_output_classes
+        tau_mem,
+        tau_leak,
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
     spike_output = model(input_data)
@@ -117,8 +122,13 @@ def test_slayer_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
+    tau_leak = 10
+
     model = SlayerLIFModel(
-        tau_mem, n_input_channels=n_input_channels, n_output_classes=n_output_classes
+        tau_mem,
+        tau_leak,
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
     spike_output = model(input_data)
@@ -132,11 +142,19 @@ def test_slayer_sinabs_model_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
+    tau_leak = 10
+
     sinabs_model = SinabsLIFModel(
-        tau_mem, n_input_channels=n_input_channels, n_output_classes=n_output_classes
+        tau_mem,
+        tau_leak=tau_leak,
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
     slayer_model = SlayerLIFModel(
-        tau_mem, n_input_channels=n_input_channels, n_output_classes=n_output_classes
+        tau_mem,
+        tau_leak=tau_leak,
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
     # make sure the weights for linear layers are the same
     for (sinabs_layer, slayer_layer) in zip(
@@ -157,11 +175,19 @@ def test_slayer_vs_sinabs_compare_grads():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
+    tau_leak = 10
+
     sinabs_model = SinabsLIFModel(
-        tau_mem, n_input_channels=n_input_channels, n_output_classes=n_output_classes
+        tau_mem,
+        tau_leak=tau_leak,
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
     slayer_model = SlayerLIFModel(
-        tau_mem, n_input_channels=n_input_channels, n_output_classes=n_output_classes
+        tau_mem,
+        tau_leak=tau_leak,
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
 
     # make sure the weights for linear layers are the same
@@ -174,15 +200,13 @@ def test_slayer_vs_sinabs_compare_grads():
     for layer in sinabs_model.spiking_layers:
         layer.tau_mem.requires_grad = False
 
-    input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
+    input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda()
 
     t_start = time.time()
     sinabs_out = sinabs_model(input_data)
     loss_sinabs = torch.nn.functional.mse_loss(sinabs_out, torch.ones_like(sinabs_out))
     loss_sinabs.backward()
-    grads_sinabs = [
-        p.grad.data.clone() for p in sinabs_model.parameters() if p.grad is not None
-    ]
+    grads_sinabs = [lyr.weight.grad.data.float() for lyr in sinabs_model.linear_layers]
     print(f"Runtime sinabs: {time.time() - t_start}")
 
     slayer_model.zero_grad()
@@ -190,7 +214,7 @@ def test_slayer_vs_sinabs_compare_grads():
     slayer_out = slayer_model(input_data)
     loss_slayer = torch.nn.functional.mse_loss(slayer_out, torch.ones_like(slayer_out))
     loss_slayer.backward()
-    grads_slayer = [p.grad.data.clone() for p in slayer_model.parameters()]
+    grads_slayer = [lyr.weight.grad.data.float() for lyr in slayer_model.linear_layers]
     print(f"Runtime slayer: {time.time() - t_start}")
 
     for (l_sin, l_slyr) in zip(
@@ -208,6 +232,7 @@ class SinabsLIFModel(nn.Sequential):
     def __init__(
         self,
         tau_mem,
+        tau_leak,
         n_input_channels=16,
         n_output_classes=10,
         threshold=1.0,
@@ -216,10 +241,13 @@ class SinabsLIFModel(nn.Sequential):
         act_fn = sa.ActivationFunction(spike_threshold=threshold)
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
+            sl.ExpLeak(tau_leak=tau_leak),
             sl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(16, 32, bias=False),
+            sl.ExpLeak(tau_leak=tau_leak),
             sl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(32, n_output_classes, bias=False),
+            sl.ExpLeak(tau_leak=tau_leak),
             sl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
         )
 
@@ -233,17 +261,18 @@ class SinabsLIFModel(nn.Sequential):
 
     @property
     def spiking_layers(self):
-        return [self[1], self[3], self[5]]
+        return [self[2], self[5], self[8]]
 
     @property
     def linear_layers(self):
-        return [self[0], self[2], self[4]]
+        return [self[0], self[3], self[6]]
 
 
 class SlayerLIFModel(nn.Sequential):
     def __init__(
         self,
         tau_mem,
+        tau_leak,
         n_input_channels=16,
         n_output_classes=10,
         threshold=1.0,
@@ -252,10 +281,13 @@ class SlayerLIFModel(nn.Sequential):
         act_fn = sa.ActivationFunction(spike_threshold=threshold)
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
+            ssl.ExpLeak(tau_leak=tau_leak),
             ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(16, 32, bias=False),
+            ssl.ExpLeak(tau_leak=tau_leak),
             ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
             nn.Linear(32, n_output_classes, bias=False),
+            ssl.ExpLeak(tau_leak=tau_leak),
             ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
         )
 
@@ -269,8 +301,8 @@ class SlayerLIFModel(nn.Sequential):
 
     @property
     def spiking_layers(self):
-        return [self[1], self[3], self[5]]
+        return [self[2], self[5], self[8]]
 
     @property
     def linear_layers(self):
-        return [self[0], self[2], self[4]]
+        return [self[0], self[3], self[6]]

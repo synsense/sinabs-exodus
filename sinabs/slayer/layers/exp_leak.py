@@ -17,8 +17,11 @@ class ExpLeak(ExpLeakSinabs):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # - Make sure buffers and parameters are on cuda
-        self.cuda()
+        # Currently trainig tau / alpha is not supported
+        if self.train_alphas:
+            self.alpha_leak.requires_grad = False
+        else:
+            self.tau_leak.requires_grad = False
 
     def forward(self, input_current: "torch.tensor") -> "torch.tensor":
         """
@@ -48,6 +51,9 @@ class ExpLeak(ExpLeakSinabs):
 
         # Reshape input to 2D -> (N, Time)
         input_2d = input_current.movedim(1, -1).flatten(end_dim=-2).contiguous()
+
+        # Rescale input with 1 - alpha
+        input_2d = (1.0 - self.alpha_leak_calculated) * input_2d
 
         # Actual evolution of states
         states = LeakyIntegrator.apply(

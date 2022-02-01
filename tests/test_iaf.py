@@ -79,7 +79,7 @@ def test_slayer_sinabs_layer_equal_output():
     assert (spike_output_sinabs == spike_output_slayer).all()
 
 
-def test_slayer_sinabs_layer_different_output_singlespike():
+def test_slayer_sinabs_layer_equal_output_singlespike():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
     activation_fn = sa.ActivationFunction(spike_fn=sa.SingleSpike)
