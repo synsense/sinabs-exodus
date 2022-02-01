@@ -102,7 +102,8 @@ def test_slayer_sinabs_layer_equal_output_maxspike():
     torch.set_printoptions(precision=10)
     batch_size, time_steps, n_neurons = 10, 100, 20
     tau_mem = 20.0
-    activation_fn = sa.ActivationFunction(spike_fn=sa.MaxSpike(3))
+    max_num_spikes = 3
+    activation_fn = sa.ActivationFunction(spike_fn=sa.MaxSpike(max_num_spikes))
     sinabs_layer = sl.LIF(tau_mem=tau_mem, activation_fn=activation_fn).cuda()
     slayer_layer = ssl.LIF(tau_mem=tau_mem, activation_fn=activation_fn).cuda()
     input_data = torch.rand((batch_size, time_steps, n_neurons)).cuda() * 1e2
@@ -111,7 +112,7 @@ def test_slayer_sinabs_layer_equal_output_maxspike():
 
     assert spike_output_sinabs.shape == spike_output_slayer.shape
     assert spike_output_sinabs.sum() > 0
-    assert spike_output_sinabs.max() == 3
+    assert spike_output_sinabs.max() == max_num_spikes
     assert spike_output_sinabs.sum() == spike_output_slayer.sum()
     assert (spike_output_sinabs == spike_output_slayer).all()
 

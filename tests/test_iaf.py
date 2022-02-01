@@ -96,6 +96,25 @@ def test_slayer_sinabs_layer_equal_output_singlespike():
     assert (spike_output_sinabs == spike_output_slayer).all()
 
 
+def test_slayer_sinabs_layer_equal_output_maxspike():
+    batch_size, time_steps = 10, 100
+    n_input_channels = 16
+    max_num_spikes = 3
+    activation_fn = sa.ActivationFunction(spike_fn=sa.MaxSpike(max_num_spikes))
+    sinabs_model = sl.IAF(activation_fn=activation_fn).cuda()
+    slayer_model = ssl.IAF(activation_fn=activation_fn).cuda()
+    input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
+    input_data[:, :10] = 1e4
+    spike_output_sinabs = sinabs_model(input_data)
+    spike_output_slayer = slayer_model(input_data)
+
+    assert spike_output_sinabs.shape == spike_output_slayer.shape
+    assert spike_output_sinabs.sum() > 0
+    assert spike_output_sinabs.max() == max_num_spikes
+    assert spike_output_sinabs.sum() == spike_output_slayer.sum()
+    assert (spike_output_sinabs == spike_output_slayer).all()
+
+
 def test_sinabs_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10

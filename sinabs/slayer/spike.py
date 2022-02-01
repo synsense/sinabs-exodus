@@ -158,7 +158,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         threshold: float,
         threshold_low: float,
         surrogate_grad_fn: Callable,
-        num_spikes_per_bin: Optional[int] = None,
+        max_num_spikes_per_bin: Optional[int] = None,
     ):
         """
         Generate spikes and apply refractory response to membrane potential.
@@ -185,7 +185,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             Lower limit for membr_pot
         surrogate_grad_fn: Callable
             Calculates surrogate gradients as function of membr_pot
-        num_spikes_per_bin: int
+        max_num_spikes_per_bin: int
             Maximum number of neurons that a neuron can emit per time step. Set None to
             remove limit (default).
 
@@ -220,7 +220,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             threshold,
             threshold_low if threshold_low is not None else 0,
             threshold_low is not None,
-            -1 if num_spikes_per_bin is None else num_spikes_per_bin,
+            -1 if max_num_spikes_per_bin is None else max_num_spikes_per_bin,
         )
 
         ctx.threshold = threshold
