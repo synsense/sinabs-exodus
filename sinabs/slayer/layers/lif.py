@@ -15,6 +15,7 @@ class LIF(IntegrateFireBase):
         activation_fn: Callable = sina.ActivationFunction(),
         threshold_low: Optional[float] = None,
         shape: Optional[torch.Size] = None,
+        norm_input: bool = True,
         record_v_mem: bool = True,
     ):
         """
@@ -31,6 +32,8 @@ class LIF(IntegrateFireBase):
             Lower bound for membrane potential v_mem, clipped at every time step.
         shape: torch.Size
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
+        norm_input: bool
+            If True, will normalise the inputs by tau_mem. This helps when training time constants.
         record_v_mem: bool
             Record membrane potential and spike output during forward call.
         """
@@ -42,6 +45,7 @@ class LIF(IntegrateFireBase):
             shape=shape,
             record_v_mem=record_v_mem,
         )
+        self.norm_input = norm_input
 
     @property
     def tau_mem(self):
@@ -61,9 +65,10 @@ class LIF(IntegrateFireBase):
 
         return param_dict
 
-    def forward(self, inp):
-        inp_rescaled = (1.0 - self.alpha_mem) * inp
-        return super().forward(inp_rescaled)
+    def forward(self, data):
+        if self.norm_input:
+            data = (1.0 - self.alpha_mem) * data
+        return super().forward(data)
 
 
 class LIFSqueeze(LIF, SqueezeMixin):

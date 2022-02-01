@@ -102,7 +102,7 @@ def test_sinabs_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
-    tau_leak = 10
+    tau_leak = 10.0
 
     model = SinabsLIFModel(
         tau_mem,
@@ -122,7 +122,7 @@ def test_slayer_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
-    tau_leak = 10
+    tau_leak = 10.0
 
     model = SlayerLIFModel(
         tau_mem,
@@ -142,7 +142,7 @@ def test_slayer_sinabs_model_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
-    tau_leak = 10
+    tau_leak = 10.0
 
     sinabs_model = SinabsLIFModel(
         tau_mem,
@@ -175,7 +175,7 @@ def test_slayer_vs_sinabs_compare_grads():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
-    tau_leak = 10
+    tau_leak = 10.0
 
     sinabs_model = SinabsLIFModel(
         tau_mem,
