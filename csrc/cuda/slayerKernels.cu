@@ -195,7 +195,7 @@ void lifForwardCuda(
 	float theta,
 	float thetaLow,
 	bool applyThetaLow,
-	bool multipleSpikes)
+	int maxNumSpikes)
 {
 	CHECK_INPUT(input);
 	CHECK_INPUT(outputSpikes);
@@ -215,6 +215,9 @@ void lifForwardCuda(
 	unsigned Ns = input.size(-1);
 	unsigned nNeurons = input.size(0);
 
+	// convert maxNumSpikes to usnigned (-1 will become max)
+	unsigned maxNumSpikesU = maxNumSpikes;
+
 	// // output spikes
 	// auto outputSpikes = torch::empty_like(input);
 	// // membrane potential
@@ -226,7 +229,7 @@ void lifForwardCuda(
 		input.data_ptr<float>(),
 		vmemInitial.data_ptr<float>(),
 		activationsPrev.data_ptr<float>(),
-		membrSubtract, alpha, theta, thetaLow, applyThetaLow, multipleSpikes, nNeurons, Ns);
+		membrSubtract, alpha, theta, thetaLow, applyThetaLow, maxNumSpikesU, nNeurons, Ns);
 
 	return;
 }   

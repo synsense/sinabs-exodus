@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, Optional
 
 import torch
 import sinabsslayerCuda
@@ -158,7 +158,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         threshold: float,
         threshold_low: float,
         surrogate_grad_fn: Callable,
-        multiple_spikes: bool = True,
+        num_spikes_per_bin: Optional[int] = None,
     ):
         """
         Generate spikes and apply refractory response to membrane potential.
@@ -185,8 +185,9 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             Lower limit for membr_pot
         surrogate_grad_fn: Callable
             Calculates surrogate gradients as function of membr_pot
-        multiple_spikes: bool
-            Can a neuron emit multiple spikes per time step?
+        num_spikes_per_bin: int
+            Maximum number of neurons that a neuron can emit per time step. Set None to
+            remove limit (default).
 
         Returns
         -------
@@ -219,7 +220,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             threshold,
             threshold_low if threshold_low is not None else 0,
             threshold_low is not None,
-            multiple_spikes,
+            -1 if num_spikes_per_bin is None else num_spikes_per_bin,
         )
 
         ctx.threshold = threshold

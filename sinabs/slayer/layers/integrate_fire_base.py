@@ -7,6 +7,7 @@ from sinabs.activation import (
     ActivationFunction,
     MultiSpike,
     SingleSpike,
+    MaxSpike,
     MembraneSubtract,
 )
 
@@ -49,9 +50,10 @@ class IntegrateFireBase(StatefulLayer):
             Record membrane potential and spike output during forward call. Default is False.
         """
 
-        if activation_fn.spike_fn not in (MultiSpike, SingleSpike) or not isinstance(
-            activation_fn.reset_fn, MembraneSubtract
-        ):
+        if (
+            activation_fn.spike_fn not in (MultiSpike, SingleSpike)
+            and not isinstance(activation_fn.spike_fn, MaxSpike)
+        ) or not isinstance(activation_fn.reset_fn, MembraneSubtract):
             raise NotImplementedError(
                 "Spike mechanism config not supported. Use MultiSpike/SingleSpike and MembraneSubtract functions."
             )
@@ -70,7 +72,12 @@ class IntegrateFireBase(StatefulLayer):
         if shape:
             self.init_state_with_shape(shape)
 
-        self.multiple_spikes = activation_fn.spike_fn == MultiSpike
+        if isinstance(activation_fn.spike_fn, MaxSpike):
+            self.max_num_spikes_per_bin = activation_fn.spike_fn.max_num_spikes_per_bin
+        elif activation_fn.spike_fn == MultiSpike:
+            self.max_num_spikes_per_bin = None
+        else:
+            self.max_num_spikes_per_bin = 1
 
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
@@ -110,7 +117,7 @@ class IntegrateFireBase(StatefulLayer):
             self.threshold,
             self.threshold_low,
             self.surrogate_grad_fn,
-            self.multiple_spikes,
+            self.max_num_spikes_per_bin,
         )
 
         # Reshape output spikes and v_mem_full, store neuron states

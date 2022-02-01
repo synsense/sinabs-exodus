@@ -25,7 +25,7 @@
  * @param theta Firing threshold
  * @param thetaLow Lower bound to vmem
  * @param applyThetaLow Flag whether vmem is lower bounded
- * @param multipleSpikes Flag whether multiple spikes can be emitted in a single time step
+ * @param maxNumSpikes Maximum number of spikes a neuron can emit per time step
  * @param nNeurons Number of neurons/batches
  * @param Ns Number of timesteps
 **/
@@ -41,7 +41,7 @@ __global__ void lifForwardKernel(
 	float theta,
 	float thetaLow,
 	bool applyThetaLow,
-	bool multipleSpikes,
+	unsigned maxNumSpikes,
 	unsigned nNeurons,
 	unsigned Ns)
 {
@@ -50,7 +50,7 @@ __global__ void lifForwardKernel(
 	if(neuronID >= nNeurons)	return;
 
 	T vmemCurr = vmemInitial[neuronID];
-	int activation = int(activationsPrev[neuronID]);
+	unsigned activation = unsigned(activationsPrev[neuronID]);
 
 	for(unsigned t=0; t<Ns; ++t){
 		// Decay state
@@ -69,11 +69,7 @@ __global__ void lifForwardKernel(
 
 		// Generate spikes
 		if(vmemCurr >= theta){
-			if(multipleSpikes){
-				activation = vmemCurr / theta;
-			} else {
-				activation = 1;
-			}
+			activation = min(unsigned(vmemCurr / theta), maxNumSpikes);
 		} else {
 			activation = 0;
 		}
@@ -671,7 +667,7 @@ void lifForward(
 	const float theta,
 	const float thetaLow,
 	const bool applyThetaLow,
-	const bool multipleSpikes,
+	const unsigned maxNumSpikes,
 	const unsigned nNeurons,
 	const unsigned Ns)
 {
@@ -685,7 +681,7 @@ void lifForward(
 			input,
 			vmemInitial,
 			activationsPrev,
-			membrSubtract, alpha, theta, thetaLow, applyThetaLow, multipleSpikes, nNeurons, Ns);
+			membrSubtract, alpha, theta, thetaLow, applyThetaLow, maxNumSpikes, nNeurons, Ns);
 }
 
 
