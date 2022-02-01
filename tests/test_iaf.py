@@ -79,17 +79,21 @@ def test_slayer_sinabs_layer_equal_output():
     assert (spike_output_sinabs == spike_output_slayer).all()
 
 
-# def test_slayer_sinabs_layer_different_output_singlespike():
-#     batch_size, time_steps = 10, 100
-#     n_input_channels = 16
-#     sinabs_model = sl.IAF().cuda()
-#     slayer_model = ssl.IAF(multiple_spikes=False).cuda()
-#     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
-#     input_data[:, :10] = 1e4
-#     spike_output_sinabs = sinabs_model(input_data)
-#     spike_output_slayer = slayer_model(input_data)
+def test_slayer_sinabs_layer_different_output_singlespike():
+    batch_size, time_steps = 10, 100
+    n_input_channels = 16
+    activation_fn = sa.ActivationFunction(spike_fn=sa.SingleSpike)
+    sinabs_model = sl.IAF(activation_fn=activation_fn).cuda()
+    slayer_model = ssl.IAF(activation_fn=activation_fn).cuda()
+    input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
+    input_data[:, :10] = 1e4
+    spike_output_sinabs = sinabs_model(input_data)
+    spike_output_slayer = slayer_model(input_data)
 
-#     assert (spike_output_sinabs != spike_output_slayer).any()
+    assert spike_output_sinabs.shape == spike_output_slayer.shape
+    assert spike_output_sinabs.sum() > 0
+    assert spike_output_sinabs.sum() == spike_output_slayer.sum()
+    assert (spike_output_sinabs == spike_output_slayer).all()
 
 
 def test_sinabs_model():
