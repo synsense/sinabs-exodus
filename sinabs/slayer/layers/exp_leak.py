@@ -22,6 +22,12 @@ class ExpLeak(StatefulLayer):
         ----------
         tau_leak: float
             Rate of leak of the state
+        shape: torch.Size
+            Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
+        threshold_low: float or None
+            Lower bound for membrane potential v_mem, clipped at every time step.
+        norm_input: bool
+            If True, will normalise the inputs by tau_mem. This helps when training time constants.
         """
         super().__init__(state_names=["v_mem"])
         self.tau_leak = torch.as_tensor(tau_leak, dtype=float)
