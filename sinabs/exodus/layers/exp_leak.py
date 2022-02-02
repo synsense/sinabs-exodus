@@ -14,6 +14,7 @@ class ExpLeak(StatefulLayer):
         shape: Optional[torch.Size] = None,
         threshold_low: Optional[float] = None,
         norm_input: bool = True,
+        decay_early: bool = False,
     ):
         """
         Exodus implementation of an integrator with exponential leak.
@@ -28,12 +29,16 @@ class ExpLeak(StatefulLayer):
             Lower bound for membrane potential v_mem, clipped at every time step.
         norm_input: bool
             If True, will normalise the inputs by tau_mem. This helps when training time constants.
+        decay_early: bool
+            If True, will scale inputs by exp(-1/tau). This corresponds to the Xylo-behavior of
+            decaying the input within the same time step.
         """
         super().__init__(state_names=["v_mem"])
         self.tau_leak = torch.as_tensor(tau_leak, dtype=float)
         self.alpha_leak = torch.exp(-1 / self.tau_leak)
         self.threshold_low = threshold_low
         self.norm_input = norm_input
+        self.decay_early = decay_early
         if shape:
             self.init_state_with_shape(shape)
 
@@ -66,6 +71,10 @@ class ExpLeak(StatefulLayer):
         if self.norm_input:
             # Rescale input with 1 - alpha
             input_2d = (1.0 - self.alpha_leak) * input_2d
+
+        if self.decay_early:
+            # Rescale input with alpha
+            input_2d = self.alpha_leak * input_2d
 
         # Actual evolution of states
         states = LeakyIntegrator.apply(

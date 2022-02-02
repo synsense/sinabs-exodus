@@ -15,6 +15,21 @@ def test_leaky_basic():
     assert membrane_output.sum() > 0
 
 
+def test_leaky_basic_early_decay():
+    time_steps = 100
+    tau_leak = torch.tensor(30.0)
+    input_current = torch.rand(time_steps, 2, 7, 7).cuda()
+    layer_dec = el.ExpLeak(tau_leak=tau_leak, decay_early=True).cuda()
+    layer = el.ExpLeak(tau_leak=tau_leak).cuda()
+    membrane_output = layer(input_current)
+    membrane_output_dec = layer_dec(input_current)
+
+    assert input_current.shape == membrane_output_dec.shape
+    assert torch.isnan(membrane_output_dec).sum() == 0
+    assert membrane_output_dec.sum() > 0
+    assert torch.allclose(membrane_output_dec, membrane_output * layer_dec.alpha_leak)
+
+
 def test_leaky_squeezed():
     batch_size = 10
     time_steps = 100
