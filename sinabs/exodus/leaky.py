@@ -53,4 +53,4 @@ class LeakyIntegrator(torch.autograd.Function):
         if ctx.decay_early:
             grad_input = ctx.alpha * grad_input
 
-        return grad_input, None, None
+        return grad_input, None, None, None, None
