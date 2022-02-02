@@ -1,4 +1,4 @@
-sinabs-slayer
+exodus
 =============
 
 A slayer fork

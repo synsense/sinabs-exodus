@@ -2,8 +2,8 @@
 build
 dist
 __pycache__
-sinabs_slayer.egg-info
-sinabsslayerCuda.cpython-38-x86_64-linux-gnu.so
+exodus.egg-info
+exodusCuda.cpython-38-x86_64-linux-gnu.so
 .vscode
 sinabs/__init__.py
 sinabs/activation/

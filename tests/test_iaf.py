@@ -2,7 +2,7 @@ import pytest
 import time
 import torch
 import torch.nn as nn
-import sinabs.slayer.layers as ssl
+import sinabs.exodus.layers as ssl
 import sinabs.layers as sl
 import sinabs.activation as sa
 
@@ -63,56 +63,56 @@ def test_state_reset():
     assert (layer.v_mem == 0).all()
 
 
-def test_slayer_sinabs_layer_equal_output():
+def test_exodus_sinabs_layer_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
     sinabs_model = sl.IAF().cuda()
-    slayer_model = ssl.IAF().cuda()
+    exodus_model = ssl.IAF().cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     spike_output_sinabs = sinabs_model(input_data)
-    spike_output_slayer = slayer_model(input_data)
+    spike_output_exodus = exodus_model(input_data)
 
-    assert spike_output_sinabs.shape == spike_output_slayer.shape
+    assert spike_output_sinabs.shape == spike_output_exodus.shape
     assert spike_output_sinabs.sum() > 0
-    assert spike_output_sinabs.sum() == spike_output_slayer.sum()
-    assert (spike_output_sinabs == spike_output_slayer).all()
+    assert spike_output_sinabs.sum() == spike_output_exodus.sum()
+    assert (spike_output_sinabs == spike_output_exodus).all()
 
 
-def test_slayer_sinabs_layer_equal_output_singlespike():
+def test_exodus_sinabs_layer_equal_output_singlespike():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
     activation_fn = sa.ActivationFunction(spike_fn=sa.SingleSpike)
     sinabs_model = sl.IAF(activation_fn=activation_fn).cuda()
-    slayer_model = ssl.IAF(activation_fn=activation_fn).cuda()
+    exodus_model = ssl.IAF(activation_fn=activation_fn).cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     spike_output_sinabs = sinabs_model(input_data)
-    spike_output_slayer = slayer_model(input_data)
+    spike_output_exodus = exodus_model(input_data)
 
-    assert spike_output_sinabs.shape == spike_output_slayer.shape
+    assert spike_output_sinabs.shape == spike_output_exodus.shape
     assert spike_output_sinabs.sum() > 0
-    assert spike_output_sinabs.sum() == spike_output_slayer.sum()
-    assert (spike_output_sinabs == spike_output_slayer).all()
+    assert spike_output_sinabs.sum() == spike_output_exodus.sum()
+    assert (spike_output_sinabs == spike_output_exodus).all()
 
 
-def test_slayer_sinabs_layer_equal_output_maxspike():
+def test_exodus_sinabs_layer_equal_output_maxspike():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
     max_num_spikes = 3
     activation_fn = sa.ActivationFunction(spike_fn=sa.MaxSpike(max_num_spikes))
     sinabs_model = sl.IAF(activation_fn=activation_fn).cuda()
-    slayer_model = ssl.IAF(activation_fn=activation_fn).cuda()
+    exodus_model = ssl.IAF(activation_fn=activation_fn).cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     spike_output_sinabs = sinabs_model(input_data)
-    spike_output_slayer = slayer_model(input_data)
+    spike_output_exodus = exodus_model(input_data)
 
-    assert spike_output_sinabs.shape == spike_output_slayer.shape
+    assert spike_output_sinabs.shape == spike_output_exodus.shape
     assert spike_output_sinabs.sum() > 0
     assert spike_output_sinabs.max() == max_num_spikes
-    assert spike_output_sinabs.sum() == spike_output_slayer.sum()
-    assert (spike_output_sinabs == spike_output_slayer).all()
+    assert spike_output_sinabs.sum() == spike_output_exodus.sum()
+    assert (spike_output_sinabs == spike_output_exodus).all()
 
 
 def test_sinabs_model():
@@ -129,10 +129,10 @@ def test_sinabs_model():
     assert spike_output.sum() > 0
 
 
-def test_slayer_model():
+def test_exodus_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
-    model = SlayerIAFModel(
+    model = ExodusIAFModel(
         n_input_channels=n_input_channels, n_output_classes=n_output_classes
     ).cuda()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
@@ -143,46 +143,46 @@ def test_slayer_model():
     assert spike_output.sum() > 0
 
 
-def test_slayer_sinabs_model_equal_output():
+def test_exodus_sinabs_model_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     sinabs_model = SinabsIAFModel(
         n_input_channels=n_input_channels, n_output_classes=n_output_classes
     ).cuda()
-    slayer_model = SlayerIAFModel(
+    exodus_model = ExodusIAFModel(
         n_input_channels=n_input_channels, n_output_classes=n_output_classes
     ).cuda()
     # make sure the weights for linear layers are the same
-    for (sinabs_layer, slayer_layer) in zip(
-        sinabs_model.linear_layers, slayer_model.linear_layers
+    for (sinabs_layer, exodus_layer) in zip(
+        sinabs_model.linear_layers, exodus_model.linear_layers
     ):
-        sinabs_layer.load_state_dict(slayer_layer.state_dict())
-    assert (sinabs_model[0].weight == slayer_model[0].weight).all()
+        sinabs_layer.load_state_dict(exodus_layer.state_dict())
+    assert (sinabs_model[0].weight == exodus_model[0].weight).all()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
     spike_output_sinabs = sinabs_model(input_data)
-    spike_output_slayer = slayer_model(input_data)
+    spike_output_exodus = exodus_model(input_data)
 
-    assert spike_output_sinabs.shape == spike_output_slayer.shape
-    assert spike_output_sinabs.sum() == spike_output_slayer.sum()
-    assert (spike_output_sinabs == spike_output_slayer).all()
+    assert spike_output_sinabs.shape == spike_output_exodus.shape
+    assert spike_output_sinabs.sum() == spike_output_exodus.sum()
+    assert (spike_output_sinabs == spike_output_exodus).all()
 
 
-def test_slayer_vs_sinabs_compare_grads():
+def test_exodus_vs_sinabs_compare_grads():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     sinabs_model = SinabsIAFModel(
         n_input_channels=n_input_channels, n_output_classes=n_output_classes
     ).cuda()
-    slayer_model = SlayerIAFModel(
+    exodus_model = ExodusIAFModel(
         n_input_channels=n_input_channels, n_output_classes=n_output_classes
     ).cuda()
 
     # make sure the weights for linear layers are the same
-    for (sinabs_layer, slayer_layer) in zip(
-        sinabs_model.linear_layers, slayer_model.linear_layers
+    for (sinabs_layer, exodus_layer) in zip(
+        sinabs_model.linear_layers, exodus_model.linear_layers
     ):
-        sinabs_layer.load_state_dict(slayer_layer.state_dict())
-    assert (sinabs_model[0].weight == slayer_model[0].weight).all()
+        sinabs_layer.load_state_dict(exodus_layer.state_dict())
+    assert (sinabs_model[0].weight == exodus_model[0].weight).all()
 
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
 
@@ -195,22 +195,22 @@ def test_slayer_vs_sinabs_compare_grads():
     ]
     print(f"Runtime sinabs: {time.time() - t_start}")
 
-    slayer_model.zero_grad()
+    exodus_model.zero_grad()
     t_start = time.time()
-    slayer_out = slayer_model(input_data)
-    loss_slayer = torch.nn.functional.mse_loss(slayer_out, torch.ones_like(slayer_out))
-    loss_slayer.backward()
-    grads_slayer = [p.grad.data.clone() for p in slayer_model.parameters()]
-    print(f"Runtime slayer: {time.time() - t_start}")
+    exodus_out = exodus_model(input_data)
+    loss_exodus = torch.nn.functional.mse_loss(exodus_out, torch.ones_like(exodus_out))
+    loss_exodus.backward()
+    grads_exodus = [p.grad.data.clone() for p in exodus_model.parameters()]
+    print(f"Runtime exodus: {time.time() - t_start}")
 
     for (l_sin, l_slyr) in zip(
-        slayer_model.spiking_layers, sinabs_model.spiking_layers
+        exodus_model.spiking_layers, sinabs_model.spiking_layers
     ):
         assert torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
 
-    assert (sinabs_out == slayer_out).all()
+    assert (sinabs_out == exodus_out).all()
 
-    for g0, g1 in zip(grads_sinabs, grads_slayer):
+    for g0, g1 in zip(grads_sinabs, grads_exodus):
         assert torch.allclose(g0, g1, atol=atol, rtol=rtol)
 
 
@@ -249,7 +249,7 @@ class SinabsIAFModel(nn.Sequential):
         return [self[0], self[2], self[4]]
 
 
-class SlayerIAFModel(nn.Sequential):
+class ExodusIAFModel(nn.Sequential):
     def __init__(
         self,
         n_input_channels=16,

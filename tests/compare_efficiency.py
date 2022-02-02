@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from time import time
 from sinabs.layers import IAF
-from sinabs.slayer.layers import IAF as IAFS
+from sinabs.exodus.layers import IAF as IAFS
 from slayerSNN import layer as IAFSOrig
 
 
@@ -34,7 +34,7 @@ def build_sinabs_model(n_channels=16, n_classes=10, threshold=1.0, threshold_low
     return TestModel()
 
 
-def build_slayer_model(
+def build_exodus_model(
     n_channels=16,
     n_classes=10,
     num_timesteps=100,
@@ -129,7 +129,7 @@ input_data = (
 )
 
 # Define models
-slayer_model = build_slayer_model(
+exodus_model = build_exodus_model(
     n_channels=n_channels,
     n_classes=n_classes,
     num_timesteps=num_timesteps,
@@ -143,11 +143,11 @@ sinabs_model = build_sinabs_model(
 ).to(device)
 
 # Copy parameters
-slayer_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
+exodus_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
 slayer_orig_model.lin1.weight.data = sinabs_model.lin1.weight.data.clone()
 
 # # Optimizers for comparing gradients
-# optim_slayer = torch.optim.SGD(slayer_model.parameters(), lr=1e-3)
+# optim_exodus = torch.optim.SGD(exodus_model.parameters(), lr=1e-3)
 # optim_slayer_orig = torch.optim.SGD(slayer_orig_model.parameters(), lr=1e-3)
 # optim_sinabs = torch.optim.SGD(sinabs_model.parameters(), lr=1e-3)
 
@@ -165,12 +165,12 @@ def forward_pass():
     t1 = time()
     print(f"\tTook {t1 - t0:.2e} s")
 
-    # Slayer
-    print("Testing slayer")
+    # Exodus
+    print("Testing exodus")
     t0 = time()
-    out_slayer = slayer_model(input_data)
-    num_spikes_slayer = out_slayer.sum()
-    print(f"\tNum spikes: {num_spikes_slayer}")
+    out_exodus = exodus_model(input_data)
+    num_spikes_exodus = out_exodus.sum()
+    print(f"\tNum spikes: {num_spikes_exodus}")
     t1 = time()
     print(f"\tTook {t1 - t0:.2e} s")
 
@@ -183,11 +183,11 @@ def forward_pass():
     t1 = time()
     print(f"\tTook {t1 - t0:.2e} s")
 
-    return num_spikes_sinabs, num_spikes_slayer, num_spikes_slyr_orig
+    return num_spikes_sinabs, num_spikes_exodus, num_spikes_slyr_orig
 
 
 # @profile
-def backward_pass(num_spikes_sinabs, num_spikes_slayer, num_spikes_slyr_orig):
+def backward_pass(num_spikes_sinabs, num_spikes_exodus, num_spikes_slyr_orig):
     print("----- Backward pass -----")
 
     # Sinabs
@@ -199,12 +199,12 @@ def backward_pass(num_spikes_sinabs, num_spikes_slayer, num_spikes_slyr_orig):
     t1 = time()
     print(f"\tTook {t1 - t0:.2e} s")
 
-    # Slayer
-    print("Testing slayer")
+    # Exodus
+    print("Testing exodus")
     t0 = time()
-    num_spikes_slayer.backward()
-    grad_sum_slayer = sum(p.grad.sum() for p in slayer_model.parameters())
-    print(f"\tGrad sum: {grad_sum_slayer}")
+    num_spikes_exodus.backward()
+    grad_sum_exodus = sum(p.grad.sum() for p in exodus_model.parameters())
+    print(f"\tGrad sum: {grad_sum_exodus}")
     t1 = time()
     print(f"\tTook {t1 - t0:.2e} s")
 
@@ -219,5 +219,5 @@ def backward_pass(num_spikes_sinabs, num_spikes_slayer, num_spikes_slyr_orig):
 
 
 if __name__ == "__main__":
-    num_spikes_sinabs, num_spikes_slayer, num_spikes_slyr_orig = forward_pass()
-    backward_pass(num_spikes_sinabs, num_spikes_slayer, num_spikes_slyr_orig)
+    num_spikes_sinabs, num_spikes_exodus, num_spikes_slyr_orig = forward_pass()
+    backward_pass(num_spikes_sinabs, num_spikes_exodus, num_spikes_slyr_orig)

@@ -1,7 +1,7 @@
 def test_generateEpsp():
     import torch
-    from sinabs.slayer.psp import generateEpsp
-    from sinabs.slayer.kernels import psp_kernels
+    from sinabs.exodus.psp import generateEpsp
+    from sinabs.exodus.kernels import psp_kernels
 
     device = "cuda:0"
 

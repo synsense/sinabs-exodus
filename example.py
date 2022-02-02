@@ -2,9 +2,9 @@ import matplotlib
 
 matplotlib.use("TkAgg")
 import torch
-from src.sinabs2.slayer.kernels import psp_kernels, exp_kernel
-from src.sinabs2.slayer.psp import generateEpsp
-from src.sinabs2.slayer.spike import spikeFunction
+from src.sinabs2.exodus.kernels import psp_kernels, exp_kernel
+from src.sinabs2.exodus.psp import generateEpsp
+from src.sinabs2.exodus.spike import spikeFunction
 import matplotlib.pyplot as plt
 import numpy as np
 

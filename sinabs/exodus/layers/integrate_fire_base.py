@@ -1,7 +1,7 @@
 from typing import Callable, Optional
 from copy import deepcopy
 import torch
-from sinabs.slayer.spike import SpikeFunctionIterForward
+from sinabs.exodus.spike import SpikeFunctionIterForward
 from sinabs.layers import StatefulLayer
 from sinabs.activation import (
     ActivationFunction,
@@ -17,11 +17,11 @@ __all__ = ["IntegrateFireBase"]
 
 class IntegrateFireBase(StatefulLayer):
     """
-    Slayer implementation of a leaky or non-leaky integrate and fire neuron with
+    Exodus implementation of a leaky or non-leaky integrate and fire neuron with
     learning enabled. Does not simulate synaptic dynamics.
     """
 
-    backend = "slayer"
+    backend = "exodus"
 
     def __init__(
         self,
@@ -32,7 +32,7 @@ class IntegrateFireBase(StatefulLayer):
         record_v_mem: bool = False,
     ):
         """
-        Slayer implementation of a leaky or non-leaky integrate and fire neuron with
+        Exodus implementation of a leaky or non-leaky integrate and fire neuron with
         learning enabled. Does not simulate synaptic dynamics.
 
         Parameters

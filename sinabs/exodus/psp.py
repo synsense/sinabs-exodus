@@ -1,5 +1,5 @@
 import torch
-import sinabsslayerCuda
+import exodusCuda
 
 
 def generateEpsp(
@@ -41,7 +41,7 @@ class PspFunction(torch.autograd.Function):
         if not kernel.ndim == 1:
             raise ValueError("'kernel' has to be 1D.")
 
-        psp = sinabsslayerCuda.conv(spikes, kernel, 1)
+        psp = exodusCuda.conv(spikes, kernel, 1)
 
         ctx.save_for_backward(kernel)
 
@@ -52,7 +52,7 @@ class PspFunction(torch.autograd.Function):
         (kernel,) = ctx.saved_tensors
         # Note that cross-correlation is defined as (a * b)[T] = sum a[t+T]*b[t],
         # whereas in literature this would often be (b * a)[T].
-        gradInput = sinabsslayerCuda.corr(gradOutput.contiguous(), kernel, 1)
+        gradInput = exodusCuda.corr(gradOutput.contiguous(), kernel, 1)
 
         # print("psp - grad_out", gradOutput)
         # print("psp - kernel", kernel)

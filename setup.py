@@ -12,13 +12,13 @@ else:
     os.environ["CXX"] = "c++"
 
 setup(
-    name='sinabs-slayer',
-    packages=['sinabs.slayer', 'sinabs.slayer.layers'],
+    name='exodus',
+    packages=['sinabs.exodus', 'sinabs.exodus.layers'],
     ext_modules=[
         CUDAExtension(
-            name='sinabsslayerCuda',
+            name='exodusCuda',
             sources=[
-                'csrc/cuda/slayerKernels.cu'
+                'csrc/cuda/exodusKernels.cu'
             ],
             depends=[
                 'csrc/cuda/spikeKernels.h',

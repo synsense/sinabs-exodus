@@ -1,5 +1,5 @@
 import torch
-from sinabs.slayer.leaky import LeakyIntegrator
+from sinabs.exodus.leaky import LeakyIntegrator
 from sinabs.layers import StatefulLayer, SqueezeMixin
 from typing import Union, Optional
 
@@ -16,7 +16,7 @@ class ExpLeak(StatefulLayer):
         norm_input: bool = True,
     ):
         """
-        Slayer implementation of an integrator with exponential leak.
+        Exodus implementation of an integrator with exponential leak.
 
         Parameters
         ----------

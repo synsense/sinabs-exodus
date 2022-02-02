@@ -1,6 +1,6 @@
 import torch
 import sinabs.layers as sl
-import sinabs.slayer.layers as el
+import sinabs.exodus.layers as el
 
 
 def test_leaky_basic():
@@ -53,17 +53,17 @@ def test_leaky_membrane_decay():
     ).all(), "Neuron membrane potentials do not seems to decay correctly."
 
 
-def test_slayer_sinabs_layer_equal_output():
+def test_exodus_sinabs_layer_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
     tau_leak = 10.0
     sinabs_model = sl.ExpLeak(tau_leak=tau_leak).cuda()
-    slayer_model = el.ExpLeak(tau_leak=tau_leak).cuda()
+    exodus_model = el.ExpLeak(tau_leak=tau_leak).cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     output_sinabs = sinabs_model(input_data)
-    output_slayer = slayer_model(input_data)
+    output_exodus = exodus_model(input_data)
 
-    assert output_sinabs.shape == output_slayer.shape
+    assert output_sinabs.shape == output_exodus.shape
     assert (output_sinabs != 0).any()
-    assert torch.allclose(output_sinabs, output_slayer)
+    assert torch.allclose(output_sinabs, output_exodus)

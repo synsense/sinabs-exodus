@@ -1,7 +1,7 @@
 from typing import Callable, Optional
 
 import torch
-import sinabsslayerCuda
+import exodusCuda
 
 
 class SpikeFunction(torch.autograd.Function):
@@ -47,7 +47,7 @@ class SpikeFunction(torch.autograd.Function):
         if not membr_pot.ndim == 2:
             raise ValueError("'membr_pot' must be 2D, (N, Time)")
 
-        spikes = sinabsslayerCuda.getSpikes(membr_pot, membrane_subtract, threshold)
+        spikes = exodusCuda.getSpikes(membr_pot, membrane_subtract, threshold)
 
         # Prepare backward
         ctx.threshold = threshold
@@ -66,7 +66,7 @@ class SpikeFunction(torch.autograd.Function):
         surrogates = (membr_pot >= (ctx.threshold - ctx.window)).float() / ctx.threshold
 
         # Gradient wrt. input
-        grad_input = sinabsslayerCuda.spikeGrads(
+        grad_input = exodusCuda.spikeGrads(
             surrogates.contiguous(), grad_output.contiguous(), ctx.membrane_subtract
         )
 
@@ -120,7 +120,7 @@ class SpikeFunctionLB(torch.autograd.Function):
         if threshold <= threshold_low:
             raise ValueError("`threshold` must be greater than `threshold_low`.")
 
-        spikes = sinabsslayerCuda.getSpikesLB(
+        spikes = exodusCuda.getSpikesLB(
             membr_pot, membrane_subtract, threshold, threshold_low
         )
         ctx.threshold = threshold
@@ -139,7 +139,7 @@ class SpikeFunctionLB(torch.autograd.Function):
         surrogates = (membr_pot >= (ctx.threshold - ctx.window)).float() / ctx.threshold
 
         # Gradient wrt. input
-        grad_input = sinabsslayerCuda.spikeGradsLB(
+        grad_input = exodusCuda.spikeGradsLB(
             surrogates.contiguous(), grad_output.contiguous(), ctx.membrane_subtract
         )
 
@@ -209,7 +209,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
         vmem = torch.empty_like(inp).contiguous()
         output_spikes = torch.empty_like(inp).contiguous()
 
-        sinabsslayerCuda.lifForward(
+        exodusCuda.lifForward(
             output_spikes,
             vmem,
             inp,
@@ -246,7 +246,7 @@ class SpikeFunctionIterForward(torch.autograd.Function):
             not_clipped = (states > ctx.threshold_low).float()
 
         # Gradient wrt. intermediate states
-        grad_input = sinabsslayerCuda.spikeGradsFull(
+        grad_input = exodusCuda.spikeGradsFull(
             surrogates.contiguous(),
             grad_output.contiguous(),
             not_clipped.contiguous(),

@@ -1,4 +1,4 @@
-import sinabsslayerCuda
+import exodusCuda
 import torch
 
 
@@ -27,7 +27,7 @@ class LeakyIntegrator(torch.autograd.Function):
         if not state_initial.ndim == 1:
             raise ValueError("'state_initial' must be 1D (N,)")
 
-        states = sinabsslayerCuda.leakyForward(inp, state_initial, alpha)
+        states = exodusCuda.leakyForward(inp, state_initial, alpha)
 
         ctx.alpha = alpha
 
@@ -35,6 +35,6 @@ class LeakyIntegrator(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        grad_input = sinabsslayerCuda.leakyBackward(grad_output, ctx.alpha)
+        grad_input = exodusCuda.leakyBackward(grad_output, ctx.alpha)
 
         return grad_input, None, None
