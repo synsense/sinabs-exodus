@@ -1,27 +1,41 @@
 import torch
 from sinabs.slayer.leaky import LeakyIntegrator
-from sinabs.layers import ExpLeak as ExpLeakSinabs
-from sinabs.layers import SqueezeMixin
+from sinabs.layers import StatefulLayer, SqueezeMixin
+from typing import Union, Optional
 
 
 __all__ = ["ExpLeak", "ExpLeakSqueeze"]
 
 
-class ExpLeak(ExpLeakSinabs):
-    """
-    Slayer implementation of an integrator with exponential leak.
-    """
+class ExpLeak(StatefulLayer):
+    def __init__(
+        self,
+        tau_leak: Union[float, torch.Tensor],
+        shape: Optional[torch.Size] = None,
+        threshold_low: Optional[float] = None,
+        norm_input: bool = True,
+    ):
+        """
+        Slayer implementation of an integrator with exponential leak.
 
-    backend = "slayer"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Currently trainig tau / alpha is not supported
-        if self.train_alphas:
-            self.alpha_leak.requires_grad = False
-        else:
-            self.tau_leak.requires_grad = False
+        Parameters
+        ----------
+        tau_leak: float
+            Rate of leak of the state
+        shape: torch.Size
+            Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
+        threshold_low: float or None
+            Lower bound for membrane potential v_mem, clipped at every time step.
+        norm_input: bool
+            If True, will normalise the inputs by tau_mem. This helps when training time constants.
+        """
+        super().__init__(state_names=["v_mem"])
+        self.tau_leak = torch.as_tensor(tau_leak, dtype=float)
+        self.alpha_leak = torch.exp(-1 / self.tau_leak)
+        self.threshold_low = threshold_low
+        self.norm_input = norm_input
+        if shape:
+            self.init_state_with_shape(shape)
 
     def forward(self, input_current: "torch.tensor") -> "torch.tensor":
         """
@@ -46,18 +60,16 @@ class ExpLeak(ExpLeakSinabs):
         ):
             self.init_state_with_shape((batch_size, *trailing_dim))
 
-        # Determine no. of time steps from input
-        time_steps = input_current.shape[1]
-
         # Reshape input to 2D -> (N, Time)
         input_2d = input_current.movedim(1, -1).flatten(end_dim=-2).contiguous()
 
-        # Rescale input with 1 - alpha
-        input_2d = (1.0 - self.alpha_leak_calculated) * input_2d
+        if self.norm_input:
+            # Rescale input with 1 - alpha
+            input_2d = (1.0 - self.alpha_leak) * input_2d
 
         # Actual evolution of states
         states = LeakyIntegrator.apply(
-            input_2d, self.v_mem.flatten().contiguous(), self.alpha_leak_calculated
+            input_2d, self.v_mem.flatten().contiguous(), self.alpha_leak
         )
 
         # Reshape states to original shape -> (Batch, Time, ...)

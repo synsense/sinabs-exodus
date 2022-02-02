@@ -56,7 +56,7 @@ def test_leaky_membrane_decay():
 def test_slayer_sinabs_layer_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
-    tau_leak = 10
+    tau_leak = 10.0
     sinabs_model = sl.ExpLeak(tau_leak=tau_leak).cuda()
     slayer_model = el.ExpLeak(tau_leak=tau_leak).cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
