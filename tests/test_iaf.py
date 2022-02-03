@@ -11,18 +11,19 @@ atol = 1e-5
 rtol = 1e-4
 
 
-def test_lif_basic():
+def test_iaf_basic():
     batch_size, time_steps = 10, 100
     input_current = torch.rand(batch_size, time_steps, 2, 7, 7).cuda()
     layer = ssl.IAF().cuda()
     spike_output = layer(input_current)
 
+    assert layer.does_spike
     assert input_current.shape == spike_output.shape
     assert torch.isnan(spike_output).sum() == 0
     assert spike_output.sum() > 0
 
 
-def test_lif_squeeze():
+def test_iaf_squeeze():
     batch_size, time_steps = 10, 100
     input_data = torch.rand(batch_size * time_steps, 2, 7, 7).cuda()
     layer = ssl.IAFSqueeze(batch_size=batch_size).cuda()

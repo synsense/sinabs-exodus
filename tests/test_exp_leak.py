@@ -10,6 +10,7 @@ def test_leaky_basic():
     layer = el.ExpLeak(tau_leak=tau_leak).cuda()
     membrane_output = layer(input_current)
 
+    assert not layer.does_spike
     assert input_current.shape == membrane_output.shape
     assert torch.isnan(membrane_output).sum() == 0
     assert membrane_output.sum() > 0
