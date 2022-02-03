@@ -69,6 +69,8 @@ class IntegrateFireBase(StatefulLayer):
         self.surrogate_grad_fn = activation_fn.surrogate_grad_fn
         self.alpha_mem = alpha_mem
         self.record_v_mem = record_v_mem
+        self.activation_fn = activation_fn
+
         if shape:
             self.init_state_with_shape(shape)
 
@@ -133,12 +135,21 @@ class IntegrateFireBase(StatefulLayer):
         return output_spikes
 
     @property
+    def shape(self):
+        if self.is_state_initialised():
+            return self.v_mem.shape
+        else:
+            return None
+
+    @property
     def _param_dict(self) -> dict:
         param_dict = super()._param_dict
         param_dict.update(
             alpha_mem=self.alpha_mem,
-            record=self.record,
+            # record_v_mem=self.record_v_mem,
             activation_fn=deepcopy(self.activation_fn),
+            threshold_low=self.threshold_low,
+            shape=self.shape,
         )
 
         return param_dict

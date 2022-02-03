@@ -1,10 +1,10 @@
-import pytest
 import time
 import torch
 import torch.nn as nn
 import sinabs.exodus.layers as ssl
 import sinabs.layers as sl
 import sinabs.activation as sa
+from sinabs.from_torch import from_model
 
 
 atol = 1e-5
@@ -13,8 +13,6 @@ rtol = 1e-4
 
 def test_lif_basic():
     batch_size, time_steps = 10, 100
-    tau_mem = torch.tensor(30.0)
-    alpha = torch.exp(-1 / tau_mem)
     input_current = torch.rand(batch_size, time_steps, 2, 7, 7).cuda()
     layer = ssl.IAF().cuda()
     spike_output = layer(input_current)
@@ -118,8 +116,10 @@ def test_exodus_sinabs_layer_equal_output_maxspike():
 def test_sinabs_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
-    model = SinabsIAFModel(
-        n_input_channels=n_input_channels, n_output_classes=n_output_classes
+    model = SNN(
+        backend="sinabs",
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
     spike_output = model(input_data)
@@ -132,8 +132,10 @@ def test_sinabs_model():
 def test_exodus_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
-    model = ExodusIAFModel(
-        n_input_channels=n_input_channels, n_output_classes=n_output_classes
+    model = SNN(
+        backend="exodus",
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
     spike_output = model(input_data)
@@ -146,18 +148,24 @@ def test_exodus_model():
 def test_exodus_sinabs_model_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
-    sinabs_model = SinabsIAFModel(
-        n_input_channels=n_input_channels, n_output_classes=n_output_classes
+    sinabs_model = SNN(
+        backend="sinabs",
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
-    exodus_model = ExodusIAFModel(
-        n_input_channels=n_input_channels, n_output_classes=n_output_classes
+    exodus_model = SNN(
+        backend="exodus",
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
     # make sure the weights for linear layers are the same
     for (sinabs_layer, exodus_layer) in zip(
         sinabs_model.linear_layers, exodus_model.linear_layers
     ):
         sinabs_layer.load_state_dict(exodus_layer.state_dict())
-    assert (sinabs_model[0].weight == exodus_model[0].weight).all()
+    assert (
+        sinabs_model.linear_layers[0].weight == exodus_model.linear_layers[0].weight
+    ).all()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
     spike_output_sinabs = sinabs_model(input_data)
     spike_output_exodus = exodus_model(input_data)
@@ -170,11 +178,15 @@ def test_exodus_sinabs_model_equal_output():
 def test_exodus_vs_sinabs_compare_grads():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
-    sinabs_model = SinabsIAFModel(
-        n_input_channels=n_input_channels, n_output_classes=n_output_classes
+    sinabs_model = SNN(
+        backend="sinabs",
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
-    exodus_model = ExodusIAFModel(
-        n_input_channels=n_input_channels, n_output_classes=n_output_classes
+    exodus_model = SNN(
+        backend="exodus",
+        n_input_channels=n_input_channels,
+        n_output_classes=n_output_classes,
     ).cuda()
 
     # make sure the weights for linear layers are the same
@@ -182,7 +194,9 @@ def test_exodus_vs_sinabs_compare_grads():
         sinabs_model.linear_layers, exodus_model.linear_layers
     ):
         sinabs_layer.load_state_dict(exodus_layer.state_dict())
-    assert (sinabs_model[0].weight == exodus_model[0].weight).all()
+    assert (
+        sinabs_model.linear_layers[0].weight == exodus_model.linear_layers[0].weight
+    ).all()
 
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
 
@@ -214,23 +228,38 @@ def test_exodus_vs_sinabs_compare_grads():
         assert torch.allclose(g0, g1, atol=atol, rtol=rtol)
 
 
-class SinabsIAFModel(nn.Sequential):
+class ANN(nn.Sequential):
     def __init__(
         self,
+        n_input_channels=16,
+        n_output_classes=10,
+    ):
+        super().__init__(
+            nn.Linear(n_input_channels, 16, bias=False),
+            nn.ReLU(),
+            nn.Linear(16, 32, bias=False),
+            nn.ReLU(),
+            nn.Linear(32, n_output_classes, bias=False),
+            nn.ReLU(),
+        )
+
+
+class SNN(nn.Module):
+    def __init__(
+        self,
+        backend,
         n_input_channels=16,
         n_output_classes=10,
         threshold=1.0,
         threshold_low=None,
     ):
-        act_fn = sa.ActivationFunction(spike_threshold=threshold)
-        super().__init__(
-            nn.Linear(n_input_channels, 16, bias=False),
-            sl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
-            nn.Linear(16, 32, bias=False),
-            sl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
-            nn.Linear(32, n_output_classes, bias=False),
-            sl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
+        super().__init__()
+        ann = ANN(
+            n_input_channels=n_input_channels, n_output_classes=n_output_classes
         )
+        self.network = from_model(
+            ann, backend=backend, threshold=threshold, threshold_low=threshold_low
+        ).spiking_model
 
     def reset_states(self):
         for lyr in self.spiking_layers:
@@ -240,45 +269,13 @@ class SinabsIAFModel(nn.Sequential):
         for lyr in self.spiking_layers:
             lyr.zero_grad()
 
-    @property
-    def spiking_layers(self):
-        return [self[1], self[3], self[5]]
-
-    @property
-    def linear_layers(self):
-        return [self[0], self[2], self[4]]
-
-
-class ExodusIAFModel(nn.Sequential):
-    def __init__(
-        self,
-        n_input_channels=16,
-        n_output_classes=10,
-        threshold=1.0,
-        threshold_low=None,
-    ):
-        act_fn = sa.ActivationFunction(spike_threshold=threshold)
-        super().__init__(
-            nn.Linear(n_input_channels, 16, bias=False),
-            ssl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
-            nn.Linear(16, 32, bias=False),
-            ssl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
-            nn.Linear(32, n_output_classes, bias=False),
-            ssl.IAF(activation_fn=act_fn, threshold_low=threshold_low),
-        )
-
-    def reset_states(self):
-        for lyr in self.spiking_layers:
-            lyr.reset_states()
-
-    def zero_grad(self):
-        for lyr in self.spiking_layers:
-            lyr.zero_grad()
+    def forward(self, data):
+        return self.network(data)
 
     @property
     def spiking_layers(self):
-        return [self[1], self[3], self[5]]
+        return [self.network[i] for i in (1, 3, 5)]
 
     @property
     def linear_layers(self):
-        return [self[0], self[2], self[4]]
+        return [self.network[i] for i in (0, 2, 4)]

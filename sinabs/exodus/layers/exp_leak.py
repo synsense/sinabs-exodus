@@ -91,6 +91,18 @@ class ExpLeak(StatefulLayer):
 
         return states
 
+    @property
+    def _param_dict(self) -> dict:
+        param_dict = super()._param_dict
+        param_dict.pop("alpha_mem")
+        param_dict.update(
+            tau_mem=self.tau_mem,
+            norm_input=self.norm_input,
+            decay_early=self.decay_early,
+        )
+
+        return param_dict
+
 
 class ExpLeakSqueeze(ExpLeak, SqueezeMixin):
     """
