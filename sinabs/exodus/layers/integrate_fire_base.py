@@ -1,7 +1,7 @@
 from typing import Callable, Optional
 from copy import deepcopy
 import torch
-from sinabs.exodus.spike import SpikeFunctionIterForward
+from sinabs.exodus.spike import IntegrateAndFire
 from sinabs.layers import StatefulLayer
 from sinabs.activation import (
     ActivationFunction,
@@ -110,7 +110,7 @@ class IntegrateFireBase(StatefulLayer):
         # Flatten out all dimensions that can be processed in parallel and ensure contiguity
         spike_input = spike_input.movedim(1, -1).reshape(-1, num_timesteps)
 
-        output_spikes, v_mem_full = SpikeFunctionIterForward.apply(
+        output_spikes, v_mem_full = IntegrateAndFire.apply(
             spike_input.contiguous(),
             self.membrane_subtract,
             self.alpha_mem,

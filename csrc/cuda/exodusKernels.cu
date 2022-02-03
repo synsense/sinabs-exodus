@@ -121,7 +121,10 @@ torch::Tensor spikeGradsCuda(
 }
 
 torch::Tensor spikeGradsCudaLB(
-	const torch::Tensor& surr, const torch::Tensor& outGrad, const torch::Tensor& notClipped, float membrSubtract)
+	const torch::Tensor& surr,
+	const torch::Tensor& outGrad,
+	const torch::Tensor& notClipped,
+	float membrSubtract)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outGrad);
