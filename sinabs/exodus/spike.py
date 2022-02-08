@@ -12,7 +12,8 @@ class SpikeFunction(torch.autograd.Function):
         membrane_subtract: float,
         surrogate_grad_fn: Callable,
         threshold: float,
-        threshold_low: float = None,
+        threshold_low: Optional[float] = None,
+        max_num_spikes_per_bin: Optional[int] = None,
     ):
         """
         Generate spikes and apply refractory response to membrane potential, considering
@@ -34,6 +35,9 @@ class SpikeFunction(torch.autograd.Function):
             Firing threshold
         threshold_low: float
             Lower limit for v_mem
+        max_num_spikes_per_bin: int
+            Maximum number of neurons that a neuron can emit per time step. Set None to
+            remove limit (default).
 
         Returns
         -------
@@ -48,12 +52,15 @@ class SpikeFunction(torch.autograd.Function):
         if threshold <= threshold_low:
             raise ValueError("`threshold` must be greater than `threshold_low`.")
 
-        if threshold_low is None:
-            spikes = exodusCuda.getSpikes(v_mem, membrane_subtract, threshold)
-        else:
-            spikes = exodusCuda.getSpikesLB(
-                v_mem, membrane_subtract, threshold, threshold_low
-            )
+        spikes = exodusCuda.getSpikes(
+            v_mem,
+            membrane_subtract,
+            threshold,
+            0 if threshold_low is None else threshold,  # threshold_low
+            threshold_low is None,  # Apply threshold_low
+            -1 if max_num_spikes_per_bin is None else max_num_spikes_per_bin
+        )
+
         ctx.threshold = threshold
         ctx.threshold_low = threshold_low
         ctx.membrane_subtract = membrane_subtract
@@ -70,20 +77,17 @@ class SpikeFunction(torch.autograd.Function):
         surrogates = ctx.surrogate_grad_fn(v_mem, ctx.threshold)
 
         if ctx.threshold_low is None:
-            # Gradient wrt. input
-            grad_input = exodusCuda.spikeGrads(
-                surrogates.contiguous(), grad_output.contiguous(), ctx.membrane_subtract
-            )
+            not_clipped = torch.ones_like(surrogates)
         else:
             # Indicate whether membrane potential (probably) has been clipped
             not_clipped = v_mem > ctx.threshold_low
-            # Gradient wrt. input
-            grad_input = exodusCuda.spikeGradsLB(
-                surrogates.contiguous(),
-                grad_output.contiguous(),
-                not_clipped.float().contiguous(),
-                ctx.membrane_subtract
-            )
+        # Gradient wrt. input
+        grad_input = exodusCuda.spikeGrads(
+            surrogates.contiguous(),
+            grad_output.contiguous(),
+            not_clipped.float().contiguous(),
+            ctx.membrane_subtract,
+        )
 
         return ctx.scale_rho * grad_input, None, None, None, None, None
 
