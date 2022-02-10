@@ -11,8 +11,9 @@
 
 // C++ Python interface
 
-torch::Tensor getSpikesCuda(
+torch::Tensor spikeForwardCuda(
 	torch::Tensor d_u,
+	const float alpha,
 	const float membrSubtract,
 	const float theta,
 	const float theta_low,
@@ -32,15 +33,15 @@ torch::Tensor getSpikesCuda(
 
 	unsigned Ns = d_u.size(-1);
 	unsigned nNeurons = d_u.size(0);
-	getSpikesLowBound<float>(
+	spikeForward<float>(
 		d_s.data_ptr<float>(),
 		d_u.data_ptr<float>(),
-		membrSubtract, nNeurons, Ns, theta, theta_low, applyThetaLow, maxNumSpikesU);
+		alpha, membrSubtract, nNeurons, Ns, theta, theta_low, applyThetaLow, maxNumSpikesU);
 
 	return d_s;
 }
 
-torch::Tensor spikeGradsRefrCuda(
+torch::Tensor spikeBackwardRefrCuda(
 	const torch::Tensor& surr, const torch::Tensor& outGrad, const torch::Tensor& refr)
 {
 	CHECK_INPUT(surr);
@@ -64,7 +65,7 @@ torch::Tensor spikeGradsRefrCuda(
 	// input gradients
 	auto inGrad = torch::zeros_like(surr);
 
-	spikeGradsRefr<float>(
+	spikeBackwardRefr<float>(
 		inGrad.data_ptr<float>(),
 		outGrad.data_ptr<float>(),
 		jaco.data_ptr<float>(),
@@ -75,10 +76,11 @@ torch::Tensor spikeGradsRefrCuda(
 	return inGrad;
 }
 
-torch::Tensor spikeGradsCuda(
+torch::Tensor spikeBackwardCuda(
 	const torch::Tensor& surr,
 	const torch::Tensor& outGrad,
 	const torch::Tensor& notClipped,
+	float alpha,
 	float membrSubtract)
 {
 	CHECK_INPUT(surr);
@@ -98,17 +100,17 @@ torch::Tensor spikeGradsCuda(
 	// input gradients
 	auto inGrad = torch::empty_like(surr);
 
-	spikeGradsLB<float>(
+	spikeBackward<float>(
 		inGrad.data_ptr<float>(),
 		outGrad.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
-		membrSubtract, nNeurons, Ns);
+		alpha, membrSubtract, nNeurons, Ns);
 
 	return inGrad;
 }
 
-torch::Tensor spikeGradsFullCuda(
+torch::Tensor lifBackwardCuda(
 	const torch::Tensor& surr,
 	const torch::Tensor& outGrad,
 	const torch::Tensor& notClipped,
@@ -132,7 +134,7 @@ torch::Tensor spikeGradsFullCuda(
 	// input gradients
 	auto inGrad = torch::empty_like(surr);
 
-	spikeGradsFull<float>(
+	lifBackward<float>(
 		inGrad.data_ptr<float>(),
 		outGrad.data_ptr<float>(),
 		surr.data_ptr<float>(),
@@ -233,7 +235,7 @@ torch::Tensor leakyBackwardCuda(
 	unsigned Ns = gradOutput.size(-1);
 	unsigned nNeurons = gradOutput.size(0);
 
-	// Tensor to store input gradient 
+	// Tensor to store input gradient
 	auto gradInput = torch::empty_like(gradOutput);
 
 	leakyBackward<float>(
@@ -246,11 +248,11 @@ torch::Tensor leakyBackwardCuda(
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-	m.def("getSpikes" 	  ,  &getSpikesCuda      , 	"Get spikes (CUDA)");
-	m.def("spikeGradsRefr",  &spikeGradsRefrCuda ,	"Get spike gradients with arbitrary refractory response(CUDA)");
-	m.def("spikeGrads"    ,  &spikeGradsCuda     ,	"Get spike gradients (CUDA)");
-	m.def("spikeGradsFull",  &spikeGradsFullCuda ,	"Get spike gradients from input to output spikes (CUDA)");
-	m.def("lifForward" 	  ,  &lifForwardCuda     , 	"LIF forward dynamics (CUDA)");
-	m.def("leakyForward"  ,  &leakyForwardCuda   ,	"Forward pass of leaky integrator");
-	m.def("leakyBackward" ,  &leakyBackwardCuda  ,	"Backward pass of leaky integrator");
+	m.def("spikeForward"     ,  &spikeForwardCuda     , "Spike generation forward pass");
+	m.def("spikeBackward"    ,  &spikeBackwardCuda    ,	"Spike generation backward pass");
+	m.def("spikeBackwardRefr",  &spikeBackwardRefrCuda,	"Spike generation backward pass for arbitrary refractory response");
+	m.def("lifBackward"      ,  &lifBackwardCuda      , "LIF backward pass");
+	m.def("lifForward" 	     ,  &lifForwardCuda       , "LIF forward dynamics");
+	m.def("leakyForward"     ,  &leakyForwardCuda     ,	"Forward pass of leaky integrator");
+	m.def("leakyBackward"    ,  &leakyBackwardCuda    ,	"Backward pass of leaky integrator");
 }

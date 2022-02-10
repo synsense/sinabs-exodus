@@ -10,6 +10,7 @@ class SpikeFunction(torch.autograd.Function):
         ctx,
         v_mem: torch.tensor,
         membrane_subtract: float,
+        alpha: float,
         surrogate_grad_fn: Callable,
         threshold: float,
         threshold_low: Optional[float] = None,
@@ -29,6 +30,8 @@ class SpikeFunction(torch.autograd.Function):
             Has to be contiguous.
         membrane_subtract: float
             Value that is subracted from membrane potential after spike
+        alpha : float
+            State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
         surrogate_grad_fn: Callable
             Calculates surrogate gradients as function of v_mem
         threshold: float
@@ -49,28 +52,36 @@ class SpikeFunction(torch.autograd.Function):
             raise ValueError("'v_mem' has to be contiguous.")
         if not v_mem.ndim == 2:
             raise ValueError("'v_mem' must be 2D, (N, Time)")
-        if threshold <= threshold_low:
+        if threshold_low is not None and (threshold <= threshold_low):
             raise ValueError("`threshold` must be greater than `threshold_low`.")
 
-        spikes = exodusCuda.getSpikes(
+        spikes = exodusCuda.spikeForward(
             v_mem,
+            alpha,
             membrane_subtract,
             threshold,
             0 if threshold_low is None else threshold,  # threshold_low
-            threshold_low is None,  # Apply threshold_low
+            threshold_low is not None,  # Apply threshold_low
             -1 if max_num_spikes_per_bin is None else max_num_spikes_per_bin
         )
 
+        ctx.alpha = alpha
         ctx.threshold = threshold
         ctx.threshold_low = threshold_low
         ctx.membrane_subtract = membrane_subtract
         ctx.surrogate_grad_fn = surrogate_grad_fn
         ctx.save_for_backward(v_mem)
 
-        return spikes
+        return spikes, v_mem
 
     @staticmethod
-    def backward(ctx, grad_output):
+    def backward(ctx, grad_output, grad_v_mem):
+
+        if torch.nonzero(grad_v_mem).any():
+            raise NotImplementedError(
+                "Direct Backpropagation through membrane potential is currently not supported."
+            )
+
         (v_mem,) = ctx.saved_tensors
 
         # Surrogate gradients
@@ -82,14 +93,15 @@ class SpikeFunction(torch.autograd.Function):
             # Indicate whether membrane potential (probably) has been clipped
             not_clipped = v_mem > ctx.threshold_low
         # Gradient wrt. input
-        grad_input = exodusCuda.spikeGrads(
+        grad_input = exodusCuda.spikeBackward(
             surrogates.contiguous(),
             grad_output.contiguous(),
             not_clipped.float().contiguous(),
+            ctx.alpha,
             ctx.membrane_subtract,
         )
 
-        return ctx.scale_rho * grad_input, None, None, None, None, None
+        return grad_input, None, None, None, None, None, None
 
 
 class IntegrateAndFire(torch.autograd.Function):
@@ -198,18 +210,12 @@ class IntegrateAndFire(torch.autograd.Function):
             not_clipped = (v_mem > ctx.threshold_low).float()
 
         # Gradient wrt. intermediate v_mem
-        grad_input = exodusCuda.spikeGradsFull(
+        grad_input = exodusCuda.lifBackward(
             surrogates.contiguous(),
             grad_output.contiguous(),
             not_clipped.contiguous(),
             ctx.membrane_subtract * ctx.alpha,
             ctx.alpha,
         )
-
-        # TODO:
-        # Currently gradient for `grad_v_mem` is ignored. Would have to add gradient
-        # of v_mem to returned grads. Could do this by not multiplying grad_output
-        # with surrogates in spikeGradsFull and passing surrogates * grad_output + grad_v_mem
-        # instead of grad_output.
 
         return (grad_input, None, None, None, None, None, None, None, None)

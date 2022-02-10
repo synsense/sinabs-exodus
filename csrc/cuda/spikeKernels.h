@@ -53,6 +53,9 @@ __global__ void lifForwardKernel(
 	unsigned activation = unsigned(activationsPrev[neuronID]);
 
 	for(unsigned t=0; t<Ns; ++t){
+		// Subtract spikes
+		vmemCurr -= activation * membrSubtract;
+
 		// Decay state
 		vmemCurr *= alpha;
 
@@ -77,13 +80,77 @@ __global__ void lifForwardKernel(
 		// Write activation into tensor
 		outputSpikes[linearID] = static_cast<float>(activation);
 
-		// Subtract spikes
-		vmemCurr -= activation * membrSubtract;
-
 		// Write current vmemCurr into tensor
 		vmemAll[linearID] = vmemCurr;
 	}
 
+}
+
+
+/**
+ * Assuming a function that calculates the output spikes of an IAF or LIF neuron (step-function
+ * or exponential for input spike response and step-function for refractory response, arbitrary
+ * surrogate gradients) for a given (synaptic) input, this kernel computes a single element
+ * (corresponding to one time step) of the the input gradient for one neuron and/or batch.
+ * It amounts to the scalar product of the output gradient with the derivative of
+ * the spike output wrt. the input at the i-th timestep.
+ *
+ * inputGrad_i = surr_i * outputGrad_i * notClipped_{i} +
+ * 				 \sum_{j=i+1}^{N_s - 1} outputGrad_j * surr_j *
+ * 				 * \prod_{k=i}^{j-1} (alpha - surr_k * membrSubtract) * notClipped_{k}
+ * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
+ * 					input gradients are to be written
+ * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
+ * @param surr 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
+ * @param notClipped 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
+ * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
+ * @param nNeurons Number of neurons/batches
+ * @param Ns Number of timesteps
+ */
+template <class T>
+__global__ void lifBackwardKernel(
+	T* __restrict__ inputGrad,
+	const T* __restrict__ outputGrad,
+	const T* __restrict__ surr,
+	const T* __restrict__ notClipped,
+	float membrSubtract, float alpha, unsigned nNeurons, unsigned Ns)
+{
+	// Identifier corresponding to the element of the input gradient that is
+	// computed as well as the denominator in the derivatives
+	unsigned i = blockIdx.x * blockDim.x + threadIdx.x;
+	if(i >= Ns)	return;
+
+	// Identifier for the current neuron and/or batch
+	unsigned neuronID = blockIdx.y * blockDim.y + threadIdx.y;
+	if(neuronID >= nNeurons)	return;
+
+	// Index of first element in current row of 2D tensors (i.e. for current neuron)
+	unsigned linearRowID = neuronID * Ns;
+	// Index at which input-gradient is to be calculated
+	unsigned inputGradID = i + linearRowID;
+
+	// Accumulate product of past (alpha - surr * membrSubtract) * notClipped terms
+	float accGrad = notClipped[inputGradID];
+
+	// First summand of input gradient is surrogate gradient * output gradient * notClipped
+	inputGrad[inputGradID] = surr[inputGradID] * outputGrad[inputGradID] * accGrad;
+
+	float newFactor;
+	unsigned linearSurrID;
+
+	// Iterate through sum, over different derivative enumerators.
+	// Stop early when accumulated product is 0
+	for(unsigned j=i + 1; (j<Ns and accGrad != 0.0f); ++j)
+	{
+		// ID for current surrogate gradient and output gradient
+		linearSurrID = j + linearRowID;
+		// New factor to be accumulated
+		newFactor = alpha - membrSubtract * surr[linearSurrID - 1];
+		accGrad *= (newFactor * notClipped[linearSurrID]);
+		// Add new term to current gradient
+		inputGrad[inputGradID] += accGrad * surr[linearSurrID] * outputGrad[linearSurrID];
+	}
 }
 
 
@@ -182,9 +249,10 @@ __global__ void leakyBackwardKernel(
 
 }
 template <class T>
-__global__ void getSpikesKernel(
+__global__ void spikeForwardKernel(
 	T* __restrict__ d_s,
 	T* __restrict__ d_u,
+	float alpha,
 	float membrSubtract,
 	unsigned nNeurons,
 	unsigned Ns,
@@ -197,8 +265,8 @@ __global__ void getSpikesKernel(
 
 	if(neuronID >= nNeurons)	return;
 
-	T vmemCurr = vmemInitial[neuronID];
 	unsigned activation;
+	float reset_decay;
 
 	for(unsigned i=0; i<Ns; ++i)
 	{
@@ -212,9 +280,11 @@ __global__ void getSpikesKernel(
 			d_s[linearID] = static_cast<float>(activation);
 
 			// Reset mechanism
+			reset_decay = alpha;
 			for(unsigned j=1; j<Ns; ++j)
 			{
-				if(i + j < Ns)	d_u[linearID + j] -= membrSubtract * activation;
+				if(i + j < Ns)	d_u[linearID + j] -= reset_decay * membrSubtract * activation;
+				reset_decay *= alpha;
 			}
 
 		// Lower bound
@@ -223,11 +293,87 @@ __global__ void getSpikesKernel(
 			float difference = theta_low - d_u[linearID];
 			for(unsigned j=1; j<Ns; ++j)
 			{
+				difference *= alpha;
 				if(i + j < Ns) d_u[linearID + j] += difference;
 			}
 		}
 	}
 
+}
+
+
+/**
+ * Assuming a function that calculates the output spikes of a SRM-neuron (exponential
+ * refractory response, arbitrary surrogate gradients) for a given (synaptic) input that
+ * has already been convolved with the input-spike response kernel, this kernel computes
+ * a single element (corresponding to one time step) of the the input gradient for
+ * one neuron and/or batch. It amounts to the scalar product of the output gradient with
+ * the derivative of the spike output wrt. the (pre-spiking) membrane potential at the
+ * i-th timestep.
+ *
+ * inputGrad_i = \sum_{j=i}^{N_s - 1} outputGrad_j * dOutput_j / dV_i
+ * 			   = surr_i * outputGrad_i +
+ * 				 \sum_{j=i+1}^{N_s - 1} outputGrad_j *
+ * 				 * (-g_i) * g_j * \prod_{k=i+1}^{j - 1} beta_k
+ * where gamma_i = surr_i * notClipped_i
+ * and beta_i = (alpha - membrSubtract_i * surr_i) * notClipped_i - 1
+ *
+ * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
+ * 					input gradients are to be written
+ * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
+ * @param surr 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
+ * @param notClipped 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
+ * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param nNeurons Number of neurons/batches
+ * @param Ns Number of timesteps
+ */
+template <class T>
+__global__ void spikeBackwardKernel(
+	T* __restrict__ inputGrad,
+	const T* __restrict__ outputGrad,
+	const T* __restrict__ surr,
+	const T* __restrict__ notClipped,
+	float alpha, float membrSubtract, unsigned nNeurons, unsigned Ns)
+{
+	// Identifier corresponding to the element of the input gradient that is
+	// computed as well as the denominator in the derivatives
+	unsigned i = blockIdx.x * blockDim.x + threadIdx.x;
+	if(i >= Ns)	return;
+
+	// Identifier for the current neuron and/or batch
+	unsigned neuronID = blockIdx.y * blockDim.y + threadIdx.y;
+	if(neuronID >= nNeurons)	return;
+
+	// Index of first element in current row of 2D tensors (i.e. for current neuron)
+	unsigned linearRowID = neuronID * Ns;
+
+	// Index at which input-gradient is to be calculated (corresponds to i in formula)
+	unsigned inputGradID = i + linearRowID;
+
+	// ID for current surrogate gradient and output gradient (corresponds to j in formula)
+	unsigned linearID = i + linearRowID;
+
+	// First summand of input gradient is surrogate gradient * output gradient
+	// Corresponds to j=i
+	inputGrad[inputGradID] = surr[linearID] * notClipped[linearID] * outputGrad[inputGradID];
+
+	// The product over k in the formula in the function description. Will be incremented
+	// iteratively while looping over j in the sum
+	float gradProd = surr[linearID] * notClipped[linearID] * membrSubtract;
+
+	// Iterate over sum, over different derivative enumerators.
+	// Stop early when accumulated product is 0
+	for(unsigned j=i + 1; (j<Ns and gradProd != 0.0f); ++j)
+	{
+		// Update linearID with current j
+		linearID = j + linearRowID;
+
+		// New summand to inputGrad_i
+		inputGrad[inputGradID] -= outputGrad[linearID] * surr[linearID] * notClipped[linearID] * gradProd;
+
+		// Update product for next step
+		gradProd *= (alpha - membrSubtract * notClipped[linearID] * surr[linearID]);
+	}
 }
 
 
@@ -259,7 +405,7 @@ __global__ void getSpikesKernel(
  * @param Ns Number of timesteps
  */
 template <class T>
-__global__ void spikeGradsRefrKernel(
+__global__ void spikeBackwardRefrKernel(
 	T* __restrict__ inputGrad,
 	const T* __restrict__ outputGrad,
 	T* __restrict__ jaco,
@@ -308,158 +454,15 @@ __global__ void spikeGradsRefrKernel(
 
 
 /**
- * Assuming a function that calculates the output spikes of a SRM-neuron (step-function
- * refractory response, arbitrary surrogate gradients) for a given (synaptic) input that
- * has already been convolved with the input-spike response kernel, this kernel computes
- * a single element (corresponding to one time step) of the the input gradient for
- * one neuron and/or batch. It amounts to the scalar product of the output gradient with
- * the derivative of the spike output wrt. the (pre-spiking) membrane potential at the
- * i-th timestep.
- *
- * inputGrad_i = \sum_{j=i}^{N_s - 1} outputGrad_j * dOutput_j / dV_i
- * 			   = surr_i * outputGrad_i +
- * 				 \sum_{j=i+1}^{N_s - 1} outputGrad_j *
- * 				 * alpha_j * \sum_{k=i}^{j - 1} beta_k * dOutput_k / dV_i
- * where alpha_i = surr_i * notClipped_i
- * and beta_i = (1 - membrSubtract_i * surr_i) * notClipped_i - 1
- *
- * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
- * 					input gradients are to be written
- * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
- * @param surr 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
- * @param notClipped 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
- * @param nNeurons Number of neurons/batches
- * @param Ns Number of timesteps
- */
-template <class T>
-__global__ void spikeGradsKernel(
-	T* __restrict__ inputGrad,
-	const T* __restrict__ outputGrad,
-	const T* __restrict__ surr,
-	const T* __restrict__ notClipped,
-	float membrSubtract, unsigned nNeurons, unsigned Ns)
-{
-	// Identifier corresponding to the element of the input gradient that is
-	// computed as well as the denominator in the derivatives
-	unsigned i = blockIdx.x * blockDim.x + threadIdx.x;
-	if(i >= Ns)	return;
-
-	// Identifier for the current neuron and/or batch
-	unsigned neuronID = blockIdx.y * blockDim.y + threadIdx.y;
-	if(neuronID >= nNeurons)	return;
-
-	// Index of first element in current row of 2D tensors (i.e. for current neuron)
-	unsigned linearRowID = neuronID * Ns;
-
-	// Index at which input-gradient is to be calculated
-	unsigned inputGradID = i + linearRowID;
-
-	// ID for current surrogate gradient and output gradient
-	unsigned linearID = i + linearRowID;
-
-	// First summand of input gradient is surrogate gradient * output gradient
-	float delta = surr[linearID] * notClipped[linearID];
-	inputGrad[inputGradID] = delta * outputGrad[inputGradID];
-
-	// Integrate over past gradients, implicitly implementing the sum over
-	// k from the formula given in the function description
-	float gradSum = 0.0f;
-
-	float gamma;
-
-	// Iterate through sum, over different derivative enumerators.
-	for(unsigned j=i + 1; j<Ns; ++j)
-	{
-		// New intermediate grad still uses surr and notClipped at previous index (j-1)
-		gamma = (1.0f - membrSubtract * surr[linearID]) * notClipped[linearID] - 1.0f;
-		gradSum += gradSum * gamma;
-		// New gradient (da_j/dV_i) is delta * gradSum, at current index (j)
-		linearID = j + linearRowID;
-		delta = surr[linearID] * notClipped[linearID];
-		// Add product of output gradient and new gradient to input gradient
-		inputGrad[inputGradID] += gradSum * delta * outputGrad[linearID];
-	}
-}
-
-
-/**
- * Assuming a function that calculates the output spikes of an IAF or LIF neuron (step-function
- * or exponential for input spike response and step-function for refractory response, arbitrary
- * surrogate gradients) for a given (synaptic) input, this kernel computes a single element 
- * (corresponding to one time step) of the the input gradient for one neuron and/or batch.
- * It amounts to the scalar product of the output gradient with the derivative of
- * the spike output wrt. the input at the i-th timestep.
- *
- * inputGrad_i = surr_i * outputGrad_i * notClipped_{i} +
- * 				 \sum_{j=i+1}^{N_s - 1} outputGrad_j * surr_j *
- * 				 * \prod_{k=i}^{j-1} (alpha - surr_k * membrSubtract) * notClipped_{k}
- * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
- * 					input gradients are to be written
- * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
- * @param surr 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
- * @param notClipped 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
- * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
- * @param nNeurons Number of neurons/batches
- * @param Ns Number of timesteps
- */
-template <class T>
-__global__ void fullGradsKernel(
-	T* __restrict__ inputGrad,
-	const T* __restrict__ outputGrad,
-	const T* __restrict__ surr,
-	const T* __restrict__ notClipped,
-	float membrSubtract, float alpha, unsigned nNeurons, unsigned Ns)
-{
-	// Identifier corresponding to the element of the input gradient that is
-	// computed as well as the denominator in the derivatives
-	unsigned i = blockIdx.x * blockDim.x + threadIdx.x;
-	if(i >= Ns)	return;
-
-	// Identifier for the current neuron and/or batch
-	unsigned neuronID = blockIdx.y * blockDim.y + threadIdx.y;
-	if(neuronID >= nNeurons)	return;
-
-	// Index of first element in current row of 2D tensors (i.e. for current neuron)
-	unsigned linearRowID = neuronID * Ns;
-	// Index at which input-gradient is to be calculated
-	unsigned inputGradID = i + linearRowID;
-
-	// Accumulate product of past (alpha - surr * membrSubtract) * notClipped terms
-	float accGrad = notClipped[inputGradID];
-
-	// First summand of input gradient is surrogate gradient * output gradient * notClipped
-	inputGrad[inputGradID] = surr[inputGradID] * outputGrad[inputGradID] * accGrad;
-
-	float newFactor;
-	unsigned linearSurrID;
-
-	// Iterate through sum, over different derivative enumerators.
-	// Stop early when accumulated product is 0
-	for(unsigned j=i + 1; (j<Ns and accGrad != 0.0f); ++j)
-	{
-		// ID for current surrogate gradient and output gradient
-		linearSurrID = j + linearRowID;
-		// New factor to be accumulated
-		newFactor = alpha - membrSubtract * surr[linearSurrID - 1];
-		accGrad *= (newFactor * notClipped[linearSurrID]);
-		// Add new term to current gradient
-		inputGrad[inputGradID] += accGrad * surr[linearSurrID] * outputGrad[linearSurrID];
-	}
-}
-
-
-/**
  * WIP
- * Equivalent to fullGradsKernel but with a recursive formula:
+ * Equivalent to lifBackwardKernel but with a recursive formula:
  * inputGrad_i = notClipped_i * (surr_i * ouputGrad_i + (alpha - surr_i * membrSubtract))
  * inputGrad_{N_s-1} = surr_{N_s-1} * notClipped_{N_s-1} * ouputGrad_{N_s-1}
  *
  * Parallelize across neurons and batches
  */
 template <class T>
-__global__ void fullGradsKernelRecursive(
+__global__ void lifBackwardKernelRecursive(
 	T* __restrict__ inputGrad,
 	const T* __restrict__ outputGrad,
 	const T* __restrict__ surr,
@@ -491,24 +494,11 @@ __global__ void fullGradsKernelRecursive(
 	}
 }
 
-
 template <class T>
-__global__ void evalRhoKernel(T* d_rho, const T* d_u, float theta, float tau, unsigned nNeurons, unsigned Ns, float scale)
-{
-	unsigned timeID = blockIdx.x * blockDim.x + threadIdx.x;
-	unsigned nID    = blockIdx.y * blockDim.y + threadIdx.y;
-
-	if(timeID >= Ns || nID >= nNeurons)	return;
-
-	unsigned linearID = timeID + nID * Ns;
-
-	d_rho[linearID] = scale/tau * exp(-fabs(theta - d_u[linearID])/tau);
-}
-
-template <class T>
-void getSpikes(
+void spikeForward(
 	T* d_s,
 	T* d_u,
+	float alpha,
 	float membrSubtract,
 	unsigned nNeurons,
 	unsigned Ns,
@@ -519,20 +509,84 @@ void getSpikes(
 {
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
-	getSpikesKernel<T><<< block, thread >>>(
-		d_s, d_u, membrSubtract, nNeurons, Ns, theta, theta_low, applyThetaLow, maxNumSpikes);
+	spikeForwardKernel<T><<< block, thread >>>(
+		d_s, d_u, alpha, membrSubtract, nNeurons, Ns, theta, theta_low, applyThetaLow, maxNumSpikes);
 }
 
 
 /**
- * Gradients for getSpikes and getSpikesLowBound functions
+ * In short: gradients for spikeForward function, but with constant refractory response.
+ *
+ * In Detail:
+ * Assuming a function that calculates the output spikes of an LIF neuron (step-function
+ * for refractory response, arbitrary surrogate gradients) for a given (synaptic) input,
+ * that has already been convolved with the spike respones kernel, use the
+ * spikeBackwardKernel kernel to compute the input gradient.
+ * It amounts to the product of the transposed Jacobian (derivative of output spikes wrt.
+ * convolved synaptic input and the output gradient.
+ *
+ * Parallelize over neurons/batches (thread.y) and elements of the input gradient (thread.x)
+ *
+ * Neuron-grid logic is taken from conv/corr functions in convKernels.h and ensures that
+ * maximum block sizes are not exceeded, even for large number of parallel units.
+ *
+ * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
+ * 					input gradients are to be written
+ * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
+ * @param surr 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
+ * @param notClipped 2D-tensor (nNeurons x Ns) indicating for each time step whether the
+ * 					 membrane potential has been clipped to a constant, which will
+ * 					 result in 0 gradients at this point.
+ * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param nNeurons Number of neurons/batches
+ * @param Ns Number of timesteps
  */
 template <class T>
-void spikeGradsRefr(T* inputGrad, const T* outputGrad, T* jaco, const T* surr, const T* refr, unsigned nNeurons, unsigned refrSize, unsigned Ns)
+void spikeBackward(
+	T* inputGrad,
+	const T* outputGrad,
+	const T* surr,
+	const T* notClipped,
+	float alpha, float membrSubtract, unsigned nNeurons, unsigned Ns)
+{
+	dim3 thread(128, 8, 1);
+
+	int nGrid = ceil(1.0f * nNeurons / thread.y / 65535);
+	int neuronsPerGrid = ceil(1.0f * nNeurons / nGrid);
+
+	for(auto i=0; i<nGrid; ++i)
+	{
+		int startOffset = i * neuronsPerGrid;
+		int neuronsInGrid = (startOffset + neuronsPerGrid <= nNeurons) ? neuronsPerGrid : nNeurons - startOffset;
+
+		if(neuronsInGrid < 0)	break;
+
+		dim3 block( ceil( 1.0f * Ns    / thread.x ),
+					ceil( 1.0f * neuronsInGrid / thread.y ),
+					1 );
+
+		// these should never be trigerred
+		if(block.y >= 65535)	AT_ERROR("maximum blockDim.y exceeded.");
+		if(block.z >= 65535)	AT_ERROR("maximum blockDim.z exceeded.");
+
+		spikeBackwardKernel<T><<< block, thread >>>( inputGrad + startOffset * Ns,
+													outputGrad  + startOffset * Ns,
+													surr + startOffset * Ns,
+													notClipped + startOffset * Ns,
+													alpha, membrSubtract, neuronsInGrid, Ns);
+	}
+}
+
+
+/**
+ * Gradients for spikeForward and spikeForwardLowBound functions
+ */
+template <class T>
+void spikeBackwardRefr(T* inputGrad, const T* outputGrad, T* jaco, const T* surr, const T* refr, unsigned nNeurons, unsigned refrSize, unsigned Ns)
 {
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
-	spikeGradsRefrKernel<T><<< block, thread >>>(inputGrad, outputGrad, jaco, surr, refr, nNeurons, refrSize, Ns);
+	spikeBackwardRefrKernel<T><<< block, thread >>>(inputGrad, outputGrad, jaco, surr, refr, nNeurons, refrSize, Ns);
 }
 
 
@@ -595,7 +649,7 @@ void lifForward(
 /**
  * Assuming a function that calculates the output spikes of an IAF or LIF neuron (step-function
  * or exponential for input spike response and step-function for refractory response, arbitrary
- * surrogate gradients) for a given (synaptic) input, use the fullGradsKernel kernel to compute
+ * surrogate gradients) for a given (synaptic) input, use the lifBackwardKernel kernel to compute
  * the input gradient.
  * It amounts to the product of the transposed Jacobian (derivative of output spikes wrt.
  * synaptic input, i.e. over the whole spike-response, resetting and spiking process)
@@ -603,7 +657,7 @@ void lifForward(
  *
  * Parallelize over neurons/batches (thread.y) and elements of the input gradient (thread.x)
  *
- * The call to fullGradsKernel can be replaced with spikeGradsKernel, which will
+ * The call to lifBackwardKernel can be replaced with spikeBackwardKernel, which will
  * give the derivatives wrt. to the synaptic inputs after they have been convolved with
  * an input-spike response kernel, so only for the spiking/resetting mechanism, allowing for
  * arbitrary spike response kernels.
@@ -624,7 +678,7 @@ void lifForward(
  * @param Ns Number of timesteps
  */
 template <class T>
-void spikeGradsFull(
+void lifBackward(
 	T* inputGrad,
 	const T* outputGrad,
 	const T* surr,
@@ -651,7 +705,7 @@ void spikeGradsFull(
 		if(block.y >= 65535)	AT_ERROR("maximum blockDim.y exceeded.");
 		if(block.z >= 65535)	AT_ERROR("maximum blockDim.z exceeded.");
 
-		fullGradsKernel<T><<< block, thread >>>( inputGrad + startOffset * Ns,
+		lifBackwardKernel<T><<< block, thread >>>( inputGrad + startOffset * Ns,
 													outputGrad  + startOffset * Ns,
 													surr + startOffset * Ns,
 													notClipped + startOffset * Ns,
@@ -706,10 +760,10 @@ void leakyBackward(
 
 /**
  * WIP
- * Like spikeGradsFull, but using a different computation method
+ * Like lifBackward, but using a different computation method
  */
 template <class T>
-void spikeGradsFullRecursive(
+void lifBackwardRecursive(
 	T* inputGrad,
 	const T* outputGrad,
 	const T* surr,
@@ -720,94 +774,12 @@ void spikeGradsFullRecursive(
 	unsigned thread = 256;
 	unsigned block  = ceil(1.0f * nNeurons / thread);
 
-	fullGradsKernelRecursive<T><<< block, thread >>>(
+	lifBackwardKernelRecursive<T><<< block, thread >>>(
 			inputGrad,
 			outputGrad,
 			surr,
 			notClipped,
 			membrSubtract, alpha, nNeurons, Ns);
-}
-
-
-/**
- * In short: gradients for getSpikes function, but with constant refractory response.
- *
- * In Detail:
- * Assuming a function that calculates the output spikes of an LIF neuron (step-function
- * for refractory response, arbitrary surrogate gradients) for a given (synaptic) input,
- * that has already been convolved with the spike respones kernel, use the
- * spikeGradsKernel kernel to compute the input gradient.
- * It amounts to the product of the transposed Jacobian (derivative of output spikes wrt.
- * convolved synaptic input and the output gradient.
- *
- * Parallelize over neurons/batches (thread.y) and elements of the input gradient (thread.x)
- *
- * Neuron-grid logic is taken from conv/corr functions in convKernels.h and ensures that
- * maximum block sizes are not exceeded, even for large number of parallel units.
- *
- * @param inputGrad 2D-tensor (nNeurons x Ns) to which the computed
- * 					input gradients are to be written
- * @param outputGrad 2D-tensor (nNeurons x Ns) that holds the given output gradients
- * @param surr 2D-tensor (nNeurons x Ns) with the given surrogate gradients ds_t/dV_t for each t
- * @param notClipped 2D-tensor (nNeurons x Ns) indicating for each time step whether the
- * 					 membrane potential has been clipped to a constant, which will
- * 					 result in 0 gradients at this point.
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
- * @param nNeurons Number of neurons/batches
- * @param Ns Number of timesteps
- */
-template <class T>
-void spikeGrads(
-	T* inputGrad,
-	const T* outputGrad,
-	const T* surr,
-	const T* notClipped,
-	float membrSubtract, unsigned nNeurons, unsigned Ns)
-{
-	dim3 thread(128, 8, 1);
-
-	int nGrid = ceil(1.0f * nNeurons / thread.y / 65535);
-	int neuronsPerGrid = ceil(1.0f * nNeurons / nGrid);
-
-	for(auto i=0; i<nGrid; ++i)
-	{
-		int startOffset = i * neuronsPerGrid;
-		int neuronsInGrid = (startOffset + neuronsPerGrid <= nNeurons) ? neuronsPerGrid : nNeurons - startOffset;
-
-		if(neuronsInGrid < 0)	break;
-
-		dim3 block( ceil( 1.0f * Ns    / thread.x ),
-					ceil( 1.0f * neuronsInGrid / thread.y ),
-					1 );
-
-		// these should never be trigerred
-		if(block.y >= 65535)	AT_ERROR("maximum blockDim.y exceeded.");
-		if(block.z >= 65535)	AT_ERROR("maximum blockDim.z exceeded.");
-
-		spikeGradsKernelLB<T><<< block, thread >>>( inputGrad + startOffset * Ns,
-													outputGrad  + startOffset * Ns,
-													surr + startOffset * Ns,
-													notClipped + startOffset * Ns,
-													membrSubtract, neuronsInGrid, Ns);
-	}
-}
-
-template <class T>
-void evalRho(T* d_rho, const T* d_u, float theta, float tauRho, float scaleRho, unsigned nNeurons, unsigned Ns)
-{
-	dim3 thread, block;
-	thread.x = 128;
-	thread.y = 8;
-	block.x = ceil(1.0f * Ns/thread.x);
-	block.y = ceil(1.0f * nNeurons/thread.y);
-	if(block.y >= 65535)	AT_ERROR("maximum blockDim.y exceeded");
-	if(block.z >= 65535)	AT_ERROR("maximum blockDim.z exceeded");
-
-	// slayerio::cout << "scaleRho = " << scaleRho << ", tauRho = " << tauRho << std::endl;
-
-	// evalRhoKernel<<< block, thread >>>(rho, u, theta, tau, info.nNeurons, Ns);
-	// evalRhoKernel<<< block, thread >>>(rho, u, theta, tau, info.nNeurons, Ns, 1.0/10);
-	evalRhoKernel<<< block, thread >>>(d_rho, d_u, theta, tauRho * theta, nNeurons, Ns, scaleRho);
 }
 
 #endif // SPIKEKERNELS_H_INCLUDED
