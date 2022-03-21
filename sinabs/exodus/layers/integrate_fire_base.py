@@ -4,11 +4,11 @@ import torch
 from sinabs.exodus.spike import IntegrateAndFire
 from sinabs.layers import StatefulLayer
 from sinabs.activation import (
-    ActivationFunction,
     MultiSpike,
     SingleSpike,
     MaxSpike,
     MembraneSubtract,
+    SingleExponential,
 )
 
 
@@ -26,8 +26,11 @@ class IntegrateFireBase(StatefulLayer):
     def __init__(
         self,
         alpha_mem: float = 1.0,
-        activation_fn: Callable = ActivationFunction(),
-        threshold_low: Optional[float] = None,
+        spike_threshold: float = 1.0,
+        spike_fn: Callable = MultiSpike,
+        reset_fn: Callable = MembraneSubtract(),
+        surrogate_grad_fn: Callable = SingleExponential(),
+        min_v_mem: Optional[float] = None,
         shape: Optional[torch.Size] = None,
         record_v_mem: bool = False,
     ):
@@ -42,7 +45,7 @@ class IntegrateFireBase(StatefulLayer):
             set to 1, for LIF to exp(-dt/tau).
         activation_fn: Callable
             a sinabs.activation.ActivationFunction to provide spiking and reset mechanism. Also defines a surrogate gradient.
-        threshold_low: float or None
+        min_v_mem: float or None
             Lower bound for membrane potential v_mem, clipped at every time step.
         shape: torch.Size
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
@@ -51,9 +54,9 @@ class IntegrateFireBase(StatefulLayer):
         """
 
         if (
-            activation_fn.spike_fn not in (MultiSpike, SingleSpike)
-            and not isinstance(activation_fn.spike_fn, MaxSpike)
-        ) or not isinstance(activation_fn.reset_fn, MembraneSubtract):
+            spike_fn not in (MultiSpike, SingleSpike)
+            and not isinstance(spike_fn, MaxSpike)
+        ) or not isinstance(reset_fn, MembraneSubtract):
             raise NotImplementedError(
                 "Spike mechanism config not supported. Use MultiSpike/SingleSpike and MembraneSubtract functions."
             )
@@ -63,20 +66,21 @@ class IntegrateFireBase(StatefulLayer):
 
         super().__init__(state_names=["v_mem", "activations"])
 
-        self.threshold = activation_fn.spike_threshold
-        self.threshold_low = threshold_low
-        self.membrane_subtract = activation_fn.spike_threshold
-        self.surrogate_grad_fn = activation_fn.surrogate_grad_fn
+        self.spike_threshold = spike_threshold
+        self.spike_fn = spike_fn
+        self.reset_fn = reset_fn
+        self.surrogate_grad_fn = surrogate_grad_fn
+        self.min_v_mem = min_v_mem
+        self.membrane_subtract = spike_threshold
         self.alpha_mem = alpha_mem
         self.record_v_mem = record_v_mem
-        self.activation_fn = activation_fn
 
         if shape:
             self.init_state_with_shape(shape)
 
-        if isinstance(activation_fn.spike_fn, MaxSpike):
-            self.max_num_spikes_per_bin = activation_fn.spike_fn.max_num_spikes_per_bin
-        elif activation_fn.spike_fn == MultiSpike:
+        if isinstance(spike_fn, MaxSpike):
+            self.max_num_spikes_per_bin = spike_fn.max_num_spikes_per_bin
+        elif spike_fn == MultiSpike:
             self.max_num_spikes_per_bin = None
         else:
             self.max_num_spikes_per_bin = 1
@@ -116,8 +120,8 @@ class IntegrateFireBase(StatefulLayer):
             self.alpha_mem,
             self.v_mem.flatten(),
             self.activations.flatten(),
-            self.threshold,
-            self.threshold_low,
+            self.spike_threshold,
+            self.min_v_mem,
             self.surrogate_grad_fn,
             self.max_num_spikes_per_bin,
         )
@@ -145,11 +149,14 @@ class IntegrateFireBase(StatefulLayer):
     def _param_dict(self) -> dict:
         param_dict = super()._param_dict
         param_dict.update(
+            spike_threshold=self.spike_threshold,
             alpha_mem=self.alpha_mem,
-            # record_v_mem=self.record_v_mem,
-            activation_fn=deepcopy(self.activation_fn),
-            threshold_low=self.threshold_low,
+            spike_fn=self.spike_fn,
+            reset_fn=self.reset_fn,
+            surrogate_grad_fn=self.surrogate_grad_fn,
+            min_v_mem=self.min_v_mem,
             shape=self.shape,
+            record_v_mem=self.record_v_mem,
         )
 
         return param_dict

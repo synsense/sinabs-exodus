@@ -2,8 +2,11 @@ import torch
 from typing import Callable, Optional
 from sinabs.exodus.layers import IntegrateFireBase
 from sinabs.layers import SqueezeMixin
-from sinabs.activation import ActivationFunction
-
+from sinabs.activation import (
+    MultiSpike,
+    MembraneSubtract,
+    SingleExponential,
+)
 
 __all__ = ["IAF", "IAFSqueeze"]
 
@@ -11,8 +14,11 @@ __all__ = ["IAF", "IAFSqueeze"]
 class IAF(IntegrateFireBase):
     def __init__(
         self,
-        activation_fn: Callable = ActivationFunction(),
-        threshold_low: Optional[float] = None,
+        spike_threshold: float = 1.0,
+        spike_fn: Callable = MultiSpike,
+        reset_fn: Callable = MembraneSubtract(),
+        surrogate_grad_fn: Callable = SingleExponential(),
+        min_v_mem: Optional[float] = None,
         shape: Optional[torch.Size] = None,
         record_v_mem: bool = False,
     ):
@@ -23,7 +29,7 @@ class IAF(IntegrateFireBase):
         ----------
         activation_fn: Callable
             a sinabs.activation.ActivationFunction to provide spiking and reset mechanism. Also defines a surrogate gradient.
-        threshold_low: float or None
+        min_v_mem: float or None
             Lower bound for membrane potential v_mem, clipped at every time step.
         shape: torch.Size
             Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
@@ -33,8 +39,11 @@ class IAF(IntegrateFireBase):
 
         super().__init__(
             alpha_mem=1.0,
-            activation_fn=activation_fn,
-            threshold_low=threshold_low,
+            spike_threshold=spike_threshold,
+            spike_fn=spike_fn,
+            reset_fn=reset_fn,
+            surrogate_grad_fn=surrogate_grad_fn,
+            min_v_mem=min_v_mem,
             shape=shape,
             record_v_mem=record_v_mem,
         )

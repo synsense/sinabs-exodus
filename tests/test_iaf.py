@@ -1,7 +1,7 @@
 import time
 import torch
 import torch.nn as nn
-import sinabs.exodus.layers as ssl
+import sinabs.exodus.layers as el
 import sinabs.layers as sl
 import sinabs.activation as sa
 from sinabs.from_torch import from_model
@@ -14,7 +14,7 @@ rtol = 1e-4
 def test_iaf_basic():
     batch_size, time_steps = 10, 100
     input_current = torch.rand(batch_size, time_steps, 2, 7, 7).cuda()
-    layer = ssl.IAF().cuda()
+    layer = el.IAF().cuda()
     spike_output = layer(input_current)
 
     assert layer.does_spike
@@ -26,7 +26,7 @@ def test_iaf_basic():
 def test_iaf_squeeze():
     batch_size, time_steps = 10, 100
     input_data = torch.rand(batch_size * time_steps, 2, 7, 7).cuda()
-    layer = ssl.IAFSqueeze(batch_size=batch_size).cuda()
+    layer = el.IAFSqueeze(batch_size=batch_size).cuda()
     spike_output = layer(input_data)
 
     assert input_data.shape == spike_output.shape
@@ -34,16 +34,16 @@ def test_iaf_squeeze():
     assert spike_output.sum() > 0
 
 
-def test_threshold_low():
+def test_min_v_mem():
     batch_size, time_steps = 10, 1
     tau_mem = torch.tensor(30.0)
     alpha = torch.exp(-1 / tau_mem)
     input_data = torch.rand(batch_size, time_steps, 2, 7, 7).cuda() / -(1 - alpha)
-    layer = ssl.LIF(tau_mem=tau_mem).cuda()
+    layer = el.LIF(tau_mem=tau_mem).cuda()
     layer(input_data)
     assert (layer.v_mem < -0.5).any()
 
-    layer = ssl.LIF(tau_mem=tau_mem, threshold_low=-0.5).cuda()
+    layer = el.LIF(tau_mem=tau_mem, min_v_mem=-0.5).cuda()
     layer(input_data)
     assert not (layer.v_mem < -0.5).any()
 
@@ -53,7 +53,7 @@ def test_state_reset():
     tau_mem = torch.tensor(30.0)
     alpha = torch.exp(-1 / tau_mem)
     input_data = torch.rand(batch_size, time_steps, 2, 7, 7).cuda() / (1 - alpha)
-    layer = ssl.LIF(tau_mem=tau_mem).cuda()
+    layer = el.LIF(tau_mem=tau_mem).cuda()
     layer.reset_states()
     layer(input_data)
     assert (layer.v_mem != 0).any()
@@ -66,7 +66,7 @@ def test_exodus_sinabs_layer_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
     sinabs_model = sl.IAF().cuda()
-    exodus_model = ssl.IAF().cuda()
+    exodus_model = el.IAF().cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     spike_output_sinabs = sinabs_model(input_data)
@@ -81,9 +81,8 @@ def test_exodus_sinabs_layer_equal_output():
 def test_exodus_sinabs_layer_equal_output_singlespike():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
-    activation_fn = sa.ActivationFunction(spike_fn=sa.SingleSpike)
-    sinabs_model = sl.IAF(activation_fn=activation_fn).cuda()
-    exodus_model = ssl.IAF(activation_fn=activation_fn).cuda()
+    sinabs_model = sl.IAF(spike_fn=sa.SingleSpike).cuda()
+    exodus_model = el.IAF(spike_fn=sa.SingleSpike).cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     spike_output_sinabs = sinabs_model(input_data)
@@ -99,9 +98,8 @@ def test_exodus_sinabs_layer_equal_output_maxspike():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
     max_num_spikes = 3
-    activation_fn = sa.ActivationFunction(spike_fn=sa.MaxSpike(max_num_spikes))
-    sinabs_model = sl.IAF(activation_fn=activation_fn).cuda()
-    exodus_model = ssl.IAF(activation_fn=activation_fn).cuda()
+    sinabs_model = sl.IAF(spike_fn=sa.MaxSpike(max_num_spikes)).cuda()
+    exodus_model = el.IAF(spike_fn=sa.MaxSpike(max_num_spikes)).cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     spike_output_sinabs = sinabs_model(input_data)
@@ -179,13 +177,11 @@ def test_exodus_sinabs_model_equal_output():
 def test_exodus_vs_sinabs_compare_grads():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
-    sinabs_model = SNN(
-        backend="sinabs",
+    sinabs_model = SinabsIAFModel(
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
     ).cuda()
-    exodus_model = SNN(
-        backend="exodus",
+    exodus_model = ExodusIAFModel(
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
     ).cuda()
@@ -199,7 +195,7 @@ def test_exodus_vs_sinabs_compare_grads():
         sinabs_model.linear_layers[0].weight == exodus_model.linear_layers[0].weight
     ).all()
 
-    input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
+    input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e3
 
     t_start = time.time()
     sinabs_out = sinabs_model(input_data)
@@ -210,7 +206,6 @@ def test_exodus_vs_sinabs_compare_grads():
     ]
     print(f"Runtime sinabs: {time.time() - t_start}")
 
-    exodus_model.zero_grad()
     t_start = time.time()
     exodus_out = exodus_model(input_data)
     loss_exodus = torch.nn.functional.mse_loss(exodus_out, torch.ones_like(exodus_out))
@@ -219,7 +214,7 @@ def test_exodus_vs_sinabs_compare_grads():
     print(f"Runtime exodus: {time.time() - t_start}")
 
     for (l_sin, l_slyr) in zip(
-        exodus_model.spiking_layers, sinabs_model.spiking_layers
+        sinabs_model.spiking_layers, exodus_model.spiking_layers
     ):
         assert torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
 
@@ -252,23 +247,19 @@ class SNN(nn.Module):
         n_input_channels=16,
         n_output_classes=10,
         threshold=1.0,
-        threshold_low=None,
+        min_v_mem=None,
     ):
         super().__init__()
         ann = ANN(
             n_input_channels=n_input_channels, n_output_classes=n_output_classes
         )
         self.network = from_model(
-            ann, backend=backend, threshold=threshold, threshold_low=threshold_low
+            ann, backend=backend, threshold=threshold, min_v_mem=min_v_mem
         ).spiking_model
 
     def reset_states(self):
         for lyr in self.spiking_layers:
             lyr.reset_states()
-
-    def zero_grad(self):
-        for lyr in self.spiking_layers:
-            lyr.zero_grad()
 
     def forward(self, data):
         return self.network(data)
@@ -280,3 +271,63 @@ class SNN(nn.Module):
     @property
     def linear_layers(self):
         return [self.network[i] for i in (0, 2, 4)]
+
+
+class SinabsIAFModel(nn.Sequential):
+    def __init__(
+        self,
+        n_input_channels=16,
+        n_output_classes=10,
+        threshold=1.0,
+        min_v_mem=None,
+    ):
+        super().__init__(
+            nn.Linear(n_input_channels, 16, bias=False),
+            sl.IAF(spike_threshold=threshold, min_v_mem=min_v_mem),
+            nn.Linear(16, 32, bias=False),
+            sl.IAF(spike_threshold=threshold, min_v_mem=min_v_mem),
+            nn.Linear(32, n_output_classes, bias=False),
+            sl.IAF(spike_threshold=threshold, min_v_mem=min_v_mem),
+        )
+
+    def reset_states(self):
+        for lyr in self.spiking_layers:
+            lyr.reset_states()
+
+    @property
+    def spiking_layers(self):
+        return [self[1], self[3], self[5]]
+
+    @property
+    def linear_layers(self):
+        return [self[0], self[2], self[4]]
+
+
+class ExodusIAFModel(nn.Sequential):
+    def __init__(
+        self,
+        n_input_channels=16,
+        n_output_classes=10,
+        threshold=1.0,
+        min_v_mem=None,
+    ):
+        super().__init__(
+            nn.Linear(n_input_channels, 16, bias=False),
+            el.IAF(spike_threshold=threshold, min_v_mem=min_v_mem),
+            nn.Linear(16, 32, bias=False),
+            el.IAF(spike_threshold=threshold, min_v_mem=min_v_mem),
+            nn.Linear(32, n_output_classes, bias=False),
+            el.IAF(spike_threshold=threshold, min_v_mem=min_v_mem),
+        )
+
+    def reset_states(self):
+        for lyr in self.spiking_layers:
+            lyr.reset_states()
+
+    @property
+    def spiking_layers(self):
+        return [self[1], self[3], self[5]]
+
+    @property
+    def linear_layers(self):
+        return [self[0], self[2], self[4]]

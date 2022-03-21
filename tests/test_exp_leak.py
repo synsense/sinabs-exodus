@@ -73,8 +73,8 @@ def test_exodus_sinabs_layer_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
     tau_leak = 10.0
-    sinabs_model = sl.ExpLeak(tau_leak=tau_leak).cuda()
-    exodus_model = el.ExpLeak(tau_leak=tau_leak).cuda()
+    sinabs_model = sl.ExpLeak(tau_mem=tau_leak, norm_input=True).cuda()
+    exodus_model = el.ExpLeak(tau_leak=tau_leak, norm_input=True).cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     output_sinabs = sinabs_model(input_data)

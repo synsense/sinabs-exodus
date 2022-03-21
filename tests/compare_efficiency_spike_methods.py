@@ -57,7 +57,7 @@ class LIFSplit(LIF):
             self.alpha_mem,
             self.surrogate_grad_fn,
             self.threshold,
-            self.threshold_low,
+            self.min_v_mem,
             self.max_num_spikes_per_bin,
         )
 
@@ -78,7 +78,7 @@ def build_exodus_model(
     n_classes=10,
     tau_mem=10.,
     threshold=1.0,
-    threshold_low=-1,
+    min_v_mem=-1,
     norm_input=False,
 ):
     class TestModel(nn.Module):
@@ -93,7 +93,7 @@ def build_exodus_model(
             activation_fn = ActivationFunction(spike_threshold=threshold)
             self.spk1 = LIF(
                 activation_fn=activation_fn,
-                threshold_low=threshold_low,
+                min_v_mem=min_v_mem,
                 tau_mem=tau_mem,
                 record_v_mem=True,
                 norm_input=norm_input,
@@ -115,7 +115,7 @@ def build_split_model(
     n_classes=10,
     tau_mem=10.,
     threshold=1.0,
-    threshold_low=-1,
+    min_v_mem=-1,
     norm_input=False,
 ):
     class TestModel(nn.Module):
@@ -130,7 +130,7 @@ def build_split_model(
             activation_fn = ActivationFunction(spike_threshold=threshold)
             self.spk1 = LIFSplit(
                 activation_fn=activation_fn,
-                threshold_low=threshold_low,
+                min_v_mem=min_v_mem,
                 tau_mem=tau_mem,
                 record_v_mem=True,
                 norm_input=norm_input,
@@ -165,12 +165,12 @@ input_data = (
 exodus_model = build_exodus_model(
     n_channels=n_channels,
     n_classes=n_classes,
-    threshold_low=None,
+    min_v_mem=None,
 ).to(device)
 split_model = build_split_model(
     n_channels=n_channels,
     n_classes=n_classes,
-    threshold_low=None,
+    min_v_mem=None,
 ).to(device)
 
 # Copy parameters

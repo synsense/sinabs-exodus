@@ -1,8 +1,7 @@
-import pytest
 import time
 import torch
 import torch.nn as nn
-import sinabs.exodus.layers as ssl
+import sinabs.exodus.layers as el
 import sinabs.layers as sl
 import sinabs.activation as sa
 
@@ -16,7 +15,7 @@ def test_lif_basic():
     tau_mem = torch.tensor(30.0)
     alpha = torch.exp(-1 / tau_mem)
     input_current = torch.rand(batch_size, time_steps, 2, 7, 7).cuda() / (1 - alpha)
-    layer = ssl.LIF(tau_mem=tau_mem).cuda()
+    layer = el.LIF(tau_mem=tau_mem).cuda()
     spike_output = layer(input_current)
 
     assert layer.does_spike
@@ -30,7 +29,7 @@ def test_lif_squeeze():
     tau_mem = torch.tensor(30.0)
     alpha = torch.exp(-1 / tau_mem)
     input_data = torch.rand(batch_size * time_steps, 2, 7, 7).cuda() / (1 - alpha)
-    layer = ssl.LIFSqueeze(tau_mem=tau_mem, batch_size=batch_size).cuda()
+    layer = el.LIFSqueeze(tau_mem=tau_mem, batch_size=batch_size).cuda()
     spike_output = layer(input_data)
 
     assert input_data.shape == spike_output.shape
@@ -38,16 +37,16 @@ def test_lif_squeeze():
     assert spike_output.sum() > 0
 
 
-def test_threshold_low():
+def test_min_v_mem():
     batch_size, time_steps = 10, 1
     tau_mem = torch.tensor(30.0)
     alpha = torch.exp(-1 / tau_mem)
     input_data = torch.rand(batch_size, time_steps, 2, 7, 7).cuda() / -(1 - alpha)
-    layer = ssl.LIF(tau_mem=tau_mem).cuda()
+    layer = el.LIF(tau_mem=tau_mem).cuda()
     layer(input_data)
     assert (layer.v_mem < -0.5).any()
 
-    layer = ssl.LIF(tau_mem=tau_mem, threshold_low=-0.5).cuda()
+    layer = el.LIF(tau_mem=tau_mem, min_v_mem=-0.5).cuda()
     layer(input_data)
     assert not (layer.v_mem < -0.5).any()
 
@@ -57,7 +56,7 @@ def test_state_reset():
     tau_mem = torch.tensor(30.0)
     alpha = torch.exp(-1 / tau_mem)
     input_data = torch.rand(batch_size, time_steps, 2, 7, 7).cuda() / (1 - alpha)
-    layer = ssl.LIF(tau_mem=tau_mem).cuda()
+    layer = el.LIF(tau_mem=tau_mem).cuda()
     layer.reset_states()
     layer(input_data)
     assert (layer.v_mem != 0).any()
@@ -71,7 +70,7 @@ def test_exodus_sinabs_layer_equal_output():
     batch_size, time_steps, n_neurons = 10, 100, 20
     tau_mem = 20.0
     sinabs_layer = sl.LIF(tau_mem=tau_mem).cuda()
-    exodus_layer = ssl.LIF(tau_mem=tau_mem).cuda()
+    exodus_layer = el.LIF(tau_mem=tau_mem).cuda()
     input_data = torch.rand((batch_size, time_steps, n_neurons)).cuda() * 1e2
     spike_output_sinabs = sinabs_layer(input_data)
     spike_output_exodus = exodus_layer(input_data)
@@ -86,9 +85,8 @@ def test_exodus_sinabs_layer_equal_output_singlespike():
     torch.set_printoptions(precision=10)
     batch_size, time_steps, n_neurons = 10, 100, 20
     tau_mem = 20.0
-    activation_fn = sa.ActivationFunction(spike_fn=sa.SingleSpike)
-    sinabs_layer = sl.LIF(tau_mem=tau_mem, activation_fn=activation_fn).cuda()
-    exodus_layer = ssl.LIF(tau_mem=tau_mem, activation_fn=activation_fn).cuda()
+    sinabs_layer = sl.LIF(tau_mem=tau_mem, spike_fn=sa.SingleSpike).cuda()
+    exodus_layer = el.LIF(tau_mem=tau_mem, spike_fn=sa.SingleSpike).cuda()
     input_data = torch.rand((batch_size, time_steps, n_neurons)).cuda() * 1e2
     spike_output_sinabs = sinabs_layer(input_data)
     spike_output_exodus = exodus_layer(input_data)
@@ -104,9 +102,8 @@ def test_exodus_sinabs_layer_equal_output_maxspike():
     batch_size, time_steps, n_neurons = 10, 100, 20
     tau_mem = 20.0
     max_num_spikes = 3
-    activation_fn = sa.ActivationFunction(spike_fn=sa.MaxSpike(max_num_spikes))
-    sinabs_layer = sl.LIF(tau_mem=tau_mem, activation_fn=activation_fn).cuda()
-    exodus_layer = ssl.LIF(tau_mem=tau_mem, activation_fn=activation_fn).cuda()
+    sinabs_layer = sl.LIF(tau_mem=tau_mem, spike_fn=sa.MaxSpike(max_num_spikes)).cuda()
+    exodus_layer = el.LIF(tau_mem=tau_mem, spike_fn=sa.MaxSpike(max_num_spikes)).cuda()
     input_data = torch.rand((batch_size, time_steps, n_neurons)).cuda() * 1e2
     spike_output_sinabs = sinabs_layer(input_data)
     spike_output_exodus = exodus_layer(input_data)
@@ -256,19 +253,18 @@ class SinabsLIFModel(nn.Sequential):
         n_input_channels=16,
         n_output_classes=10,
         threshold=1.0,
-        threshold_low=None,
+        min_v_mem=None,
     ):
-        act_fn = sa.ActivationFunction(spike_threshold=threshold)
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            sl.ExpLeak(tau_leak=tau_leak),
-            sl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
+            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(16, 32, bias=False),
-            sl.ExpLeak(tau_leak=tau_leak),
-            sl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
+            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(32, n_output_classes, bias=False),
-            sl.ExpLeak(tau_leak=tau_leak),
-            sl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
+            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
         )
 
     def reset_states(self):
@@ -296,19 +292,18 @@ class ExodusLIFModel(nn.Sequential):
         n_input_channels=16,
         n_output_classes=10,
         threshold=1.0,
-        threshold_low=None,
+        min_v_mem=None,
     ):
-        act_fn = sa.ActivationFunction(spike_threshold=threshold)
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            ssl.ExpLeak(tau_leak=tau_leak),
-            ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
+            el.ExpLeak(tau_leak=tau_leak, norm_input=True),
+            el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(16, 32, bias=False),
-            ssl.ExpLeak(tau_leak=tau_leak),
-            ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
+            el.ExpLeak(tau_leak=tau_leak, norm_input=True),
+            el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(32, n_output_classes, bias=False),
-            ssl.ExpLeak(tau_leak=tau_leak),
-            ssl.LIF(tau_mem=tau_mem, activation_fn=act_fn, threshold_low=threshold_low),
+            el.ExpLeak(tau_leak=tau_leak, norm_input=True),
+            el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
         )
 
     def reset_states(self):

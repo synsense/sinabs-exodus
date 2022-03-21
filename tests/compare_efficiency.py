@@ -7,7 +7,7 @@ from sinabs.exodus.layers import IAF as IAFS
 from slayerSNN import layer as IAFSOrig
 
 
-def build_sinabs_model(n_channels=16, n_classes=10, threshold=1.0, threshold_low=None):
+def build_sinabs_model(n_channels=16, n_classes=10, threshold=1.0, min_v_mem=None):
     class TestModel(nn.Module):
         def __init__(self):
             super().__init__()
@@ -17,7 +17,7 @@ def build_sinabs_model(n_channels=16, n_classes=10, threshold=1.0, threshold_low
                 kernel_size=(5, 5, 1),
                 bias=False,
             )
-            self.spk1 = IAF(threshold=threshold, threshold_low=threshold_low)
+            self.spk1 = IAF(threshold=threshold, min_v_mem=min_v_mem)
 
         # @profile
         def forward(self, data):
@@ -40,7 +40,7 @@ def build_exodus_model(
     num_timesteps=100,
     scale_grads=1.0,
     threshold=1.0,
-    threshold_low=None,
+    min_v_mem=None,
 ):
     class TestModel(nn.Module):
         def __init__(self):
@@ -54,7 +54,7 @@ def build_exodus_model(
             self.spk1 = IAFS(
                 num_timesteps=num_timesteps,
                 threshold=threshold,
-                threshold_low=threshold_low,
+                min_v_mem=min_v_mem,
                 scale_grads=scale_grads,
             )
 
@@ -133,13 +133,13 @@ exodus_model = build_exodus_model(
     n_channels=n_channels,
     n_classes=n_classes,
     num_timesteps=num_timesteps,
-    threshold_low=-1,
+    min_v_mem=-1,
 ).to(device)
 slayer_orig_model = build_slayer_orig_model(
     n_channels=n_channels, n_classes=n_classes, num_timesteps=num_timesteps
 ).to(device)
 sinabs_model = build_sinabs_model(
-    n_channels=n_channels, n_classes=n_classes, threshold_low=-1
+    n_channels=n_channels, n_classes=n_classes, min_v_mem=-1
 ).to(device)
 
 # Copy parameters
