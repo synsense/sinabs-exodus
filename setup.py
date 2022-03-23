@@ -4,6 +4,9 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 import os
 
+with open("sinabs/exodus/version.py") as version_info:
+    exec(version_info.read())
+
 if cpp_extension.check_compiler_abi_compatibility("g++"):
     os.environ["CC"] = "g++"
     os.environ["CXX"] = "g++"
@@ -32,6 +35,7 @@ setup(
         )
     ],
     cmdclass={'build_ext': BuildExtension},
-    install_requires=["sinabs"]
+    install_requires=["sinabs"],
+    version=__version__,
 )
 
