@@ -136,6 +136,7 @@ class IntegrateFireBase(StatefulLayer):
         # update neuron states
         self.v_mem = v_mem_full[:, -1].clone()
 
+        self.firing_rate = output_spikes.sum() / output_spikes.numel()
         return output_spikes
 
     @property
