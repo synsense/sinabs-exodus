@@ -1,6 +1,6 @@
 # sinabs-exodus
 
-This project is loosely based upon the SLAYER-pytorch repository.
+This project is loosely based upon the [slayerPytorch](https://github.com/bamsumit/slayerPytorch).
 As a plugin to the [sinabs](https://sinabs.ai) spiking neural network library it can provide massive speedups in trianing and inference on GPU.
 
 
@@ -21,13 +21,13 @@ $ nvidia-smi
 ```
 does **not** show you the installed CUDA version, but only the newest version your Nvidia driver is compatible with.
 
-You should also make sure that you have a [pyTorch](https://pytorch.org/get-started/locally/) installation that is compatible with your CUDA version.
+You should also make sure that you have a [PyTorch](https://pytorch.org/get-started/locally/) installation that is compatible with your CUDA version.
 To verify this, open a python console and run
 ```
 import torch
 print(torch.__version__)
 ```
-The part after the `+` in the output is the CUDA version that pyTorch has been installed for and should match that of your system.
+The part after the `+` in the output is the CUDA version that PyTorch has been installed for and should match that of your system.
 
 ### Installation
 
