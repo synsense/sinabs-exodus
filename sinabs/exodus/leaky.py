@@ -1,4 +1,4 @@
-import exodusCuda
+import exodus_cuda
 import torch
 
 
@@ -39,7 +39,7 @@ class LeakyIntegrator(torch.autograd.Function):
         if decay_early:
             inp = alpha * inp
 
-        states = exodusCuda.leakyForward(inp, state_initial, alpha)
+        states = exodus_cuda.leakyForward(inp, state_initial, alpha)
 
         ctx.alpha = alpha
         ctx.decay_early = decay_early
@@ -48,7 +48,7 @@ class LeakyIntegrator(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        grad_input = exodusCuda.leakyBackward(grad_output, ctx.alpha)
+        grad_input = exodus_cuda.leakyBackward(grad_output, ctx.alpha)
 
         if ctx.decay_early:
             grad_input = ctx.alpha * grad_input
