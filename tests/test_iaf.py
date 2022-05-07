@@ -266,7 +266,7 @@ class SNN(nn.Module):
             n_input_channels=n_input_channels, n_output_classes=n_output_classes
         )
         self.network = from_model(
-            ann, backend=backend, threshold=threshold, min_v_mem=min_v_mem
+            ann, backend=backend, spike_threshold=threshold, min_v_mem=min_v_mem
         ).spiking_model
 
     def reset_states(self):
