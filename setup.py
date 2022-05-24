@@ -19,19 +19,17 @@ setup(
     packages=['sinabs.exodus', 'sinabs.exodus.layers'],
     ext_modules=[
         CUDAExtension(
-            name='exodusCuda',
+            name='exodus_cuda',
             sources=[
-                'csrc/cuda/exodusKernels.cu'
+                'cuda/bindings.cu',
+                # 'cuda/leaky_bindings.cu',
+                # 'cuda/experimental_bindings.cu',
             ],
             depends=[
-                'csrc/cuda/spikeKernels.h',
-                'csrc/cuda/convKernels.h',
-                'csrc/cuda/shiftKernels.h'
+                'cuda/lif_kernels.h'
+                'cuda/leaky_kernels.h'
+                # 'cuda/experimental_kernels.h'
             ],
-            extra_compile_args={
-                'cxx': ['-g'],
-                'nvcc': ['-arch=sm_60', '-O3', '-use_fast_math']
-            }
         )
     ],
     cmdclass={'build_ext': BuildExtension},

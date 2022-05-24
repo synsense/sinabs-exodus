@@ -1,7 +1,7 @@
 from typing import Callable, Optional
 
 import torch
-import exodusCuda
+import exodus_cuda
 
 
 class SpikeFunction(torch.autograd.Function):
@@ -55,7 +55,7 @@ class SpikeFunction(torch.autograd.Function):
         if min_v_mem is not None and (threshold <= min_v_mem):
             raise ValueError("`threshold` must be greater than `min_v_mem`.")
 
-        spikes = exodusCuda.spikeForward(
+        spikes = exodus_cuda.spikeForward(
             v_mem,
             alpha,
             membrane_subtract,
@@ -93,7 +93,7 @@ class SpikeFunction(torch.autograd.Function):
             # Indicate whether membrane potential (probably) has been clipped
             not_clipped = v_mem > ctx.min_v_mem
         # Gradient wrt. input
-        grad_input = exodusCuda.spikeBackward(
+        grad_input = exodus_cuda.spikeBackward(
             surrogates.contiguous(),
             grad_output.contiguous(),
             not_clipped.float().contiguous(),
@@ -167,7 +167,7 @@ class IntegrateAndFire(torch.autograd.Function):
         v_mem = torch.empty_like(inp).contiguous()
         output_spikes = torch.empty_like(inp).contiguous()
 
-        exodusCuda.lifForward(
+        exodus_cuda.lifForward(
             output_spikes,
             v_mem,
             inp,
@@ -210,7 +210,7 @@ class IntegrateAndFire(torch.autograd.Function):
             not_clipped = (v_mem > ctx.min_v_mem).float()
 
         # Gradient wrt. intermediate v_mem
-        grad_input = exodusCuda.lifBackward(
+        grad_input = exodus_cuda.lifBackward(
             surrogates.contiguous(),
             grad_output.contiguous(),
             not_clipped.contiguous(),

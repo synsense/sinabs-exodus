@@ -1,8 +1,10 @@
 # sinabs-exodus
 
-This project is loosely based upon the [slayerPytorch](https://github.com/bamsumit/slayerPytorch).
-As a plugin to the [sinabs](https://sinabs.ai) spiking neural network library it can provide massive speedups in trianing and inference on GPU.
+Sinabs-exodus is a plugin to the [sinabs](https://sinabs.ai) spiking neural network library. It can provide massive speedups in training and inference on GPU.
 
+The tool is based on EXODUS[^1], a formulation of backpropagation-through-time with surrogate gradients, that allows for efficient parallelization. EXODUS stands for _**EX**act calculation **O**f **D**erivatives as **U**pdate to **S**LAYER_. It builds upon the SLAYER[^2] algorithm, but uses mathematically accurate gradients and tends to be more robust to surrogate gradient scaling, making training less prone to suffer from exploding or vanishin gradients.
+
+Some of the code in this library is loosely based upon [slayerPytorch](https://github.com/bamsumit/slayerPytorch), the python implementation of SLAYER.
 
 ## Getting started
 
@@ -66,3 +68,15 @@ iaf = IAF()
 ```
 
 Note that the `tau_syn` parameter for adding synaptic dynamics to `IAF` and `LIF` layers is currently not supported. However, you can include an additional `ExpLeak` layer in your model for the same functionality.
+
+## License
+
+Sinabs-exodus is published under AGPL v3.0. See the LICENSE file for details.
+
+## Footnotes
+[^1]: tba
+
+
+[^2]: Sumit Bam Shrestha and Garrick Orchard. "SLAYER: Spike Layer Error Reassignment in Time." 
+In _Advances in Neural Information Processing Systems_, pp. 1417-1426. 2018.
+
