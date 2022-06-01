@@ -17,8 +17,8 @@ void lifForward(
 	const torch::Tensor& input,
 	const torch::Tensor& vmemInitial,
 	const torch::Tensor& activationsPrev,
+    const torch::Tensor& alpha,
 	float membrSubtract,
-        float alpha,
 	float theta,
 	float thetaLow,
 	bool applyThetaLow,
@@ -29,17 +29,19 @@ void lifForward(
 	CHECK_INPUT(vmem);
 	CHECK_INPUT(vmemInitial);
 	CHECK_INPUT(activationsPrev);
+	CHECK_INPUT(alpha);
 
 	// check if tensors are on same device
 	CHECK_DEVICE(input, vmem);
 	CHECK_DEVICE(input, outputSpikes);
 	CHECK_DEVICE(input, vmemInitial);
 	CHECK_DEVICE(input, activationsPrev);
+	CHECK_DEVICE(input, alpha);
 
-	// set the current cuda device to wherever the tensor d_u resides
+	// set the current cuda device to wherever the tensor input resides
 	cudaSetDevice(input.device().index());
 
-	unsigned Ns = input.size(-1);
+	unsigned nTimesteps = input.size(-1);
 	unsigned nNeurons = input.size(0);
 
 	// convert maxNumSpikes to usnigned (-1 will become max)
@@ -56,7 +58,8 @@ void lifForward(
 		input.data_ptr<float>(),
 		vmemInitial.data_ptr<float>(),
 		activationsPrev.data_ptr<float>(),
-		membrSubtract, alpha, theta, thetaLow, applyThetaLow, maxNumSpikesU, nNeurons, Ns);
+		alpha.data_ptr<float>(),
+		membrSubtract, theta, thetaLow, applyThetaLow, maxNumSpikesU, nNeurons, nTimesteps);
 
 	return;
 }
@@ -65,21 +68,23 @@ torch::Tensor lifBackward(
 	const torch::Tensor& surr,
 	const torch::Tensor& outGrad,
 	const torch::Tensor& notClipped,
-	float refr,
-    float alpha)
+	const torch::Tensor& alpha,
+	float refr)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outGrad);
 	CHECK_INPUT(notClipped);
+	CHECK_INPUT(alpha);
 
 	// check if tensor are in same device
 	CHECK_DEVICE(surr, outGrad);
 	CHECK_DEVICE(surr, notClipped);
+	CHECK_DEVICE(surr, alpha);
 
-	// set the current cuda device to wherever the tensor d_u resides
+	// set the current cuda device to wherever the tensor surr resides
 	cudaSetDevice(surr.device().index());
 
-	unsigned Ns = surr.size(-1);
+	unsigned nTimesteps = surr.size(-1);
 	unsigned nNeurons = surr.size(0);
 
 	// input gradients
@@ -90,9 +95,51 @@ torch::Tensor lifBackward(
 		outGrad.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
-		refr, alpha, nNeurons, Ns);
+		alpha.data_ptr<float>(),
+		refr, nNeurons, nTimesteps);
 
 	return inGrad;
+}
+
+torch::Tensor lifBackwardAlpha(
+	const torch::Tensor& surr,
+	const torch::Tensor& outGrad,
+	const torch::Tensor& vmem,
+	const torch::Tensor& notClipped,
+	const torch::Tensor& alpha,
+	float refr)
+{
+	CHECK_INPUT(surr);
+	CHECK_INPUT(outGrad);
+	CHECK_INPUT(vmem);
+	CHECK_INPUT(notClipped);
+	CHECK_INPUT(alpha);
+
+	// check if tensor are in same device
+	CHECK_DEVICE(surr, outGrad);
+	CHECK_DEVICE(surr, vmem);
+	CHECK_DEVICE(surr, notClipped);
+	CHECK_DEVICE(surr, alpha);
+
+	// set the current cuda device to wherever the tensor surr resides
+	cudaSetDevice(surr.device().index());
+
+	unsigned nTimesteps = surr.size(-1);
+	unsigned nNeurons = surr.size(0);
+
+	// input gradients
+	auto alphaGrad = torch::empty_like(surr);
+
+	lifBackwardCuda<float>(
+		alphaGrad.data_ptr<float>(),
+		outGrad.data_ptr<float>(),
+		vmem.data_ptr<float>(),
+		surr.data_ptr<float>(),
+		notClipped.data_ptr<float>(),
+		alpha.data_ptr<float>(),
+		refr, nNeurons, nTimesteps);
+
+	return alphaGrad;
 }
 
 
@@ -112,7 +159,7 @@ torch::Tensor leakyForward(
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(vmemInitial.device().index());
 
-	unsigned Ns = input.size(-1);
+	unsigned nTimesteps = input.size(-1);
 	unsigned nNeurons = input.size(0);
 
 	// Tensor to store membrane potential
@@ -122,7 +169,7 @@ torch::Tensor leakyForward(
 		vmemFull.data_ptr<float>(),
 		input.data_ptr<float>(),
 		vmemInitial.data_ptr<float>(),
-		alpha, nNeurons, Ns);
+		alpha, nNeurons, nTimesteps);
 
 	return vmemFull;
 }
@@ -136,7 +183,7 @@ torch::Tensor leakyBackward(
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(gradOutput.device().index());
 
-	unsigned Ns = gradOutput.size(-1);
+	unsigned nTimesteps = gradOutput.size(-1);
 	unsigned nNeurons = gradOutput.size(0);
 
 	// Tensor to store input gradient
@@ -145,7 +192,7 @@ torch::Tensor leakyBackward(
 	leakyBackwardCuda<float>(
 		gradInput.data_ptr<float>(),
 		gradOutput.data_ptr<float>(),
-		alpha, nNeurons, Ns);
+		alpha, nNeurons, nTimesteps);
 
 	return gradInput;
 }
@@ -173,12 +220,12 @@ torch::Tensor spikeForward(
 	// convert maxNumSpikes to usnigned (-1 will become max)
 	unsigned maxNumSpikesU = maxNumSpikes;
 
-	unsigned Ns = d_u.size(-1);
+	unsigned nTimesteps = d_u.size(-1);
 	unsigned nNeurons = d_u.size(0);
 	spikeForwardCuda<float>(
 		d_s.data_ptr<float>(),
 		d_u.data_ptr<float>(),
-		alpha, membrSubtract, nNeurons, Ns, theta, theta_low, applyThetaLow, maxNumSpikesU);
+		alpha, membrSubtract, nNeurons, nTimesteps, theta, theta_low, applyThetaLow, maxNumSpikesU);
 
 	return d_s;
 }
@@ -198,11 +245,11 @@ torch::Tensor spikeBackwardRefrCuda(
 	cudaSetDevice(surr.device().index());
 
 	unsigned refrSize = refr.size(-1);
-	unsigned Ns = surr.size(-1);
+	unsigned nTimesteps = surr.size(-1);
 	unsigned nNeurons = surr.size(0);
 
 	// jacobian
-	auto jaco = torch::zeros({nNeurons, Ns, Ns}, torch::dtype(torch::kFloat32).device(surr.device()));
+	auto jaco = torch::zeros({nNeurons, nTimesteps, nTimesteps}, torch::dtype(torch::kFloat32).device(surr.device()));
 
 	// input gradients
 	auto inGrad = torch::zeros_like(surr);
@@ -213,7 +260,7 @@ torch::Tensor spikeBackwardRefrCuda(
 		jaco.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		refr.data_ptr<float>(),
-		nNeurons, refrSize, Ns);
+		nNeurons, refrSize, nTimesteps);
 
 	return inGrad;
 }
@@ -236,7 +283,7 @@ torch::Tensor spikeBackward(
 	// set the current cuda device to wherever the tensor d_u resides
 	cudaSetDevice(surr.device().index());
 
-	unsigned Ns = surr.size(-1);
+	unsigned nTimesteps = surr.size(-1);
 	unsigned nNeurons = surr.size(0);
 
 	// input gradients
@@ -247,7 +294,7 @@ torch::Tensor spikeBackward(
 		outGrad.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
-		alpha, membrSubtract, nNeurons, Ns);
+		alpha, membrSubtract, nNeurons, nTimesteps);
 
 	return inGrad;
 }
@@ -259,7 +306,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 	m.def("spikeBackward"    ,  &spikeBackward    ,	"Spike generation backward pass");
 	m.def("spikeBackwardRefr",  &spikeBackwardRefrCuda,	"Spike generation backward pass for arbitrary refractory response");
 	m.def("lifBackward"      ,  &lifBackward      , "LIF backward pass");
-	m.def("lifForward" 	 ,  &lifForward       , "LIF forward dynamics");
+	m.def("lifBackwardAlpha" ,  &lifBackwardAlpha , "LIF backward pass for alphas");
+	m.def("lifForward" 	     ,  &lifForward       , "LIF forward dynamics");
 	m.def("leakyForward"     ,  &leakyForward     ,	"Forward pass of leaky integrator");
 	m.def("leakyBackward"    ,  &leakyBackward    ,	"Backward pass of leaky integrator");
 }
