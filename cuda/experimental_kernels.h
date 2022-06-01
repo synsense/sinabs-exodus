@@ -30,7 +30,6 @@ __global__ void spikeForwardKernel(
 
 	if(neuronID >= nNeurons)	return;
 
-	unsigned activation;
 	float reset_decay;
 
 	for(unsigned i=0; i<nTimesteps; ++i)

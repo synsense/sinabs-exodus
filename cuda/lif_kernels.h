@@ -128,8 +128,7 @@ __global__ void lifBackwardKernel(
     const scalarType* __restrict__ alpha,
     float membrSubtract,
     unsigned nNeurons,
-    unsigned nTimesteps,
-    bool calculateAlphaGrad)
+    unsigned nTimesteps)
 {
     // Identifier corresponding to the element of the input gradient that is
     // computed as well as the denominator in the derivatives
@@ -209,8 +208,7 @@ __global__ void lifBackwardAlphaKernel(
 {
     // Identifier for the current neuron and/or batch
     unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
-    if(neuronID >= nNeurons)    return;
-    if(i >= nTimesteps) return;
+    if(neuronID >= nNeurons) return;
 
     // Index of first element in current row of 2D tensors (i.e. for current neuron)
     unsigned linearRowID = neuronID * nTimesteps;
@@ -221,7 +219,6 @@ __global__ void lifBackwardAlphaKernel(
     // First summand of input gradient is surrogate gradient * output gradient * notClipped
     alphaGrad[neuronID] = 0.0f;
 
-    float newFactor;
     float newGrad;
     unsigned jIndex;
 
@@ -362,7 +359,7 @@ void lifBackwardCuda(
     for(auto i=0; i<nGrid; ++i)
     {
         int startOffset = i * neuronsPerGrid;
-        int neuronsInGrid = (startOffset + neuronsPerGrid <= nNeurons) ? neuronsPerGrid : nNeurons - startOffset;
+        unsigned neuronsInGrid = (startOffset + neuronsPerGrid <= nNeurons) ? neuronsPerGrid : nNeurons - startOffset;
 
         if(neuronsInGrid < 0)   break;
 

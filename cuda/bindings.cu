@@ -130,7 +130,7 @@ torch::Tensor lifBackwardAlpha(
 	// input gradients
 	auto alphaGrad = torch::empty_like(surr);
 
-	lifBackwardCuda<float>(
+	lifBackwardAlphaCuda<float>(
 		alphaGrad.data_ptr<float>(),
 		outGrad.data_ptr<float>(),
 		vmem.data_ptr<float>(),
