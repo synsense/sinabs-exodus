@@ -1,58 +1,87 @@
 import torch
 from typing import Callable, Optional
-from sinabs.exodus.layers import IntegrateFireBase
 from sinabs.layers import SqueezeMixin
 from sinabs.activation import (
     MultiSpike,
     MembraneSubtract,
     SingleExponential,
 )
+from sinabs.exodus.layers import LIF
 
-__all__ = ["IAF", "IAFSqueeze"]
 
+class IAF(LIF):
+    """
+    An Integrate and Fire neuron layer.
 
-class IAF(IntegrateFireBase):
+    Neuron dynamics in discrete time:
+
+    .. math ::
+        V_{mem}(t+1) = V_{mem}(t) + \\sum z(t)
+
+        \\text{if } V_{mem}(t) >= V_{th} \\text{, then } V_{mem} \\rightarrow V_{reset}
+
+    where :math:`\\sum z(t)` represents the sum of all input currents at time :math:`t`.
+
+    Parameters
+    ----------
+    spike_threshold: float
+        Spikes are emitted if v_mem is above that threshold. By default set to 1.0.
+    spike_fn: torch.autograd.Function
+        Choose a Sinabs or custom torch.autograd.Function that takes a dict of states,
+        a spike threshold and a surrogate gradient function and returns spikes. Be aware
+        that the class itself is passed here (because torch.autograd methods are static)
+        rather than an object instance.
+    reset_fn: Callable
+        A function that defines how the membrane potential is reset after a spike.
+    surrogate_grad_fn: Callable
+        Choose how to define gradients for the spiking non-linearity during the
+        backward pass. This is a function of membrane potential.
+    tau_syn: float
+        Synaptic decay time constants. If None, no synaptic dynamics are used, which is the default.
+    min_v_mem: float or None
+        Lower bound for membrane potential v_mem, clipped at every time step.
+    shape: torch.Size
+        Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
+    record_states: bool
+        When True, will record all internal states such as v_mem or i_syn in a dictionary attribute `recordings`. Default is False.
+    """
+
     def __init__(
         self,
         spike_threshold: float = 1.0,
         spike_fn: Callable = MultiSpike,
         reset_fn: Callable = MembraneSubtract(),
         surrogate_grad_fn: Callable = SingleExponential(),
+        tau_syn: Optional[float] = None,
         min_v_mem: Optional[float] = None,
         shape: Optional[torch.Size] = None,
-        record_v_mem: bool = False,
+        record_states: bool = False,
     ):
-        """
-        Exodus implementation of a spiking, non-leaky, IAF neuron with learning enabled.
-
-        Parameters
-        ----------
-        activation_fn: Callable
-            a sinabs.activation.ActivationFunction to provide spiking and reset mechanism. Also defines a surrogate gradient.
-        min_v_mem: float or None
-            Lower bound for membrane potential v_mem, clipped at every time step.
-        shape: torch.Size
-            Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
-        record_v_mem: bool
-            Record membrane potential and spike output during forward call. Default is False.
-        """
-
         super().__init__(
-            alpha_mem=1.0,
+            tau_mem=np.inf,
+            tau_syn=tau_syn,
             spike_threshold=spike_threshold,
             spike_fn=spike_fn,
             reset_fn=reset_fn,
             surrogate_grad_fn=surrogate_grad_fn,
             min_v_mem=min_v_mem,
             shape=shape,
-            record_v_mem=record_v_mem,
+            norm_input=False,
+            record_states=record_states,
         )
+        # IAF does not have time constants
+        self.tau_mem = None
+
+    @property
+    def alpha_mem_calculated(self):
+        return torch.tensor(1.)
 
     @property
     def _param_dict(self) -> dict:
         param_dict = super()._param_dict
-        param_dict.pop("alpha_mem")
-
+        param_dict.pop("tau_mem")
+        param_dict.pop("train_alphas")
+        param_dict.pop("norm_input")
         return param_dict
 
 
