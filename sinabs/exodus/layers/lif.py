@@ -95,7 +95,7 @@ class LIF(LIFSinabs):
 
     def _parse_activation_fn(self, spike_fn, reset_fn):
 
-        if spike_fn is None and reset_fn is None:
+        if spike_fn is None:
             # Non-spiking neurons
             return
 
@@ -139,6 +139,7 @@ class LIF(LIFSinabs):
             input_2d,  # Input data
             self.i_syn.flatten().contiguous(),  # Initial synaptic states
             self.alpha_syn_calculated.expand(input_2d[:,0].shape)  # Synaptic alpha
+            self.train_alphas,  # Should grad for alphas be calculated
         )
 
     def _forward_membrane(self, i_syn_2d: torch.Tensor):
@@ -151,12 +152,13 @@ class LIF(LIFSinabs):
             # Rescale input with 1 - alpha
             i_syn_2d = (1.0 - alpha_mem) * i_syn_2d
 
-        if self.spike_fn is None and self.reset_fn is None:
+        if self.spike_fn is None:
             # - Non-spiking case (leaky integrator)
             v_mem = LeakyIntegrator.apply(
                 i_syn_2d,  # Input data
                 self.v_mem.flatten().contiguous(),  # Initial vmem
                 alpha_mem  # Membrane alpha
+                self.train_alphas,  # Should grad for alphas be calculated
             )
 
             return v_mem, v_mem
@@ -164,14 +166,15 @@ class LIF(LIFSinabs):
 
         return IntegrateAndFire.apply(
             i_syn_2d.contiguous(),  # Input data
-            self.spike_threshold,  # Membrane subtract
             alpha_mem,  # Alphas
             self.v_mem.flatten().contiguous(),  # Initial vmem
             self.activations.flatten(),  # Initial activations
             self.spike_threshold,  # Spike threshold
+            self.spike_threshold,  # Membrane subtract
             self.min_v_mem,  # Lower bound on vmem
             self.surrogate_grad_fn,  # Surrogate gradient
             self.max_num_spikes_per_bin,  # Max. number of spikes per bin
+            self.train_alphas,  # Should grad for alphas be calculated
         )
 
 
