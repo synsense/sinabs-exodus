@@ -7,9 +7,10 @@ class LeakyIntegrator(torch.autograd.Function):
     def forward(
         ctx,
         inp: torch.tensor,
-        state_initial: torch.tensor,
-        alpha: float,
+        alpha: torh.tensor,
+        v_mem_init: torch.tensor,
         decay_early: bool = False,
+        get_alpha_grads: bool = False,
     ):
         """
         Evolve a leaky integrator as
@@ -21,28 +22,39 @@ class LeakyIntegrator(torch.autograd.Function):
             2D input tensor, shape: (N, T_sim), where N is
             *anything* that can be computed in parallel, i.e. batches, neurons...
             Has to be contiguous.
-        state_initial: torch.Tensor
+        alpha : torch.Tensor
+            1D, shape: (N,). State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
+        v_mem_init: torch.Tensor
             1D Tensor with initial states for each neuron, shape (N,). Has to
             be contiguous.
-        alpha : float
-            State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
         decay_early: bool
             If True, will scale inputs by exp(-1/tau). This corresponds to the Xylo-behavior of
             decaying the input within the same time step.
+        get_alpha_grads: bool
+            If True, gradients for alpha will be calculated during backward call.
         """
 
         if not inp.ndim == 2:
-            raise ValueError("'inp' must be 2D (N, Time)")
-        if not state_initial.ndim == 1:
-            raise ValueError("'state_initial' must be 1D (N,)")
+            raise ValueError("'inp' must be 2D, (N, Time)")
+        if not inp.is_contiguous():
+            raise ValueError("'inp' has to be contiguous.")
+        if not alpha.ndim == 1:
+            raise ValueError("'alpha' must be 1D, (N,)")
+        if not alpha.is_contiguous():
+            raise ValueError("'alpha' has to be contiguous.")
+        if not v_mem_init.ndim == 1:
+            raise ValueError("'v_mem_init' must be 1D, (N,)")
+        if not v_mem_init.is_contiguous():
+            raise ValueError("'v_mem_init' has to be contiguous.")
 
         if decay_early:
             inp = alpha * inp
 
-        states = exodus_cuda.leakyForward(inp, state_initial, alpha)
+        states = exodus_cuda.leakyForward(inp, v_mem_init, alpha)
 
         ctx.alpha = alpha
         ctx.decay_early = decay_early
+        ctx.get_alpha_grads = get_alpha_grads
 
         return states
 
@@ -53,4 +65,4 @@ class LeakyIntegrator(torch.autograd.Function):
         if ctx.decay_early:
             grad_input = ctx.alpha * grad_input
 
-        return grad_input, None, None, None, None
+        return grad_input, None, None, None, None, None

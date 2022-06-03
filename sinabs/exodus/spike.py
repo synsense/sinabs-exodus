@@ -109,14 +109,15 @@ class IntegrateAndFire(torch.autograd.Function):
     def forward(
         ctx,
         inp: torch.tensor,
-        membrane_subtract: float,
-        alpha: float,
+        alpha: torch.tensor,
         v_mem_init: torch.tensor,
         activations: torch.tensor,
         threshold: float,
+        membrane_subtract: float,
         min_v_mem: float,
         surrogate_grad_fn: Callable,
         max_num_spikes_per_bin: Optional[int] = None,
+        get_alpha_grads: bool = False,
     ):
         """
         Integrate membrane potential with or without leak. Then generate spikes and apply
@@ -128,10 +129,8 @@ class IntegrateAndFire(torch.autograd.Function):
             Input to the layer. Expected shape: (N, T_sim), where N is
             *anything* that can be computed in parallel, i.e. batches, neurons...
             Has to be contiguous.
-        membrane_subtract: float
-            Value that is subracted from membrane potential after spike
-        alpha : float
-            State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
+        alpha : torch.Tensor
+            1D shape (N,). State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
         v_mem_init : torch.Tensor
             1D shape (N,).  Initial v_mem. Has to be contiguous.
         activations : torch.tensor
@@ -139,6 +138,8 @@ class IntegrateAndFire(torch.autograd.Function):
             Has to be contiguous.
         threshold: float
             Firing threshold
+        membrane_subtract: float
+            Value that is subracted from membrane potential after spike
         min_v_mem: float
             Lower limit for v_mem
         surrogate_grad_fn: Callable
@@ -146,6 +147,8 @@ class IntegrateAndFire(torch.autograd.Function):
         max_num_spikes_per_bin: int
             Maximum number of neurons that a neuron can emit per time step. Set None to
             remove limit (default).
+        get_alpha_grads: bool
+            If True, gradients for alpha will be calculated during backward call.
 
         Returns
         -------
@@ -159,9 +162,22 @@ class IntegrateAndFire(torch.autograd.Function):
             raise ValueError("'inp' must be 2D, (N, Time)")
         if not inp.is_contiguous():
             raise ValueError("'inp' has to be contiguous.")
+        if not alpha.ndim == 1:
+            raise ValueError("'alpha' must be 1D, (N,)")
+        if not alpha.is_contiguous():
+            raise ValueError("'alpha' has to be contiguous.")
+        if not v_mem_init.ndim == 1:
+            raise ValueError("'v_mem_init' must be 1D, (N,)")
+        if not v_mem_init.is_contiguous():
+            raise ValueError("'v_mem_init' has to be contiguous.")
+        if not activations.ndim == 1:
+            raise ValueError("'activations' must be 1D, (N,)")
+        if not activations.is_contiguous():
+            raise ValueError("'activations' has to be contiguous.")
+
         if min_v_mem is not None and threshold <= min_v_mem:
             raise ValueError("`threshold` must be greater than `min_v_mem`.")
-        if not 0 <= alpha <= 1:
+        if (alpha < 0).any() or (alpha > 1).any():
             raise ValueError("'alpha' must be between 0 and 1.")
 
         v_mem = torch.empty_like(inp).contiguous()
@@ -187,6 +203,7 @@ class IntegrateAndFire(torch.autograd.Function):
         ctx.membrane_subtract = membrane_subtract
         ctx.alpha = alpha
         ctx.save_for_backward(v_mem)
+        ctx.get_alpha_grads = get_alpha_grads
 
         return output_spikes, v_mem
 
@@ -209,7 +226,7 @@ class IntegrateAndFire(torch.autograd.Function):
         else:
             not_clipped = (v_mem > ctx.min_v_mem).float()
 
-        # Gradient wrt. intermediate v_mem
+        # Gradient wrt. input
         grad_input = exodus_cuda.lifBackward(
             surrogates.contiguous(),
             grad_output.contiguous(),
@@ -218,4 +235,15 @@ class IntegrateAndFire(torch.autograd.Function):
             ctx.alpha,
         )
 
-        return (grad_input, None, None, None, None, None, None, None, None)
+        # Gradient wrt alpha
+        if ctx.get_alpha_grads:
+            grad_alpha = exodus_cuda.lifBackwardAlpha(
+                surrogates.contiguous(),
+                grad_output.contiguous(),
+                v_mem.contiguous()
+                not_clipped.contiguous(),
+                ctx.membrane_subtract * ctx.alpha,
+                ctx.alpha,
+            )
+
+        return (grad_input, grad_alpha, None, None, None, None, None, None, None, None)

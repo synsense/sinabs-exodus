@@ -4,103 +4,64 @@ from sinabs.layers import StatefulLayer, SqueezeMixin
 from typing import Union, Optional
 
 
-__all__ = ["ExpLeak", "ExpLeakSqueeze"]
+class ExpLeak(LIF):
+    """
+    A Leaky Integrator layer.
 
+    Neuron dynamics in discrete time:
 
-class ExpLeak(StatefulLayer):
+    .. math ::
+        V_{mem}(t+1) = \\alpha V_{mem}(t) + (1-\\alpha)\\sum z(t)
+
+    where :math:`\\alpha =  e^{-1/tau_{mem}}` and :math:`\\sum z(t)` represents the sum of all input currents at time :math:`t`.
+
+    Parameters
+    ----------
+    tau_mem: float
+        Membrane potential time constant.
+    min_v_mem: float or None
+        Lower bound for membrane potential v_mem, clipped at every time step.
+    train_alphas: bool
+        When True, the discrete decay factor exp(-1/tau) is used for training rather than tau itself.
+    shape: torch.Size
+        Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
+    norm_input: bool
+        When True, normalise input current by tau. This helps when training time constants.
+    record_states: bool
+        When True, will record all internal states such as v_mem or i_syn in a dictionary attribute `recordings`. Default is False.
+    """
+
     def __init__(
         self,
-        tau_leak: Union[float, torch.Tensor],
+        tau_mem: Union[float, torch.Tensor],
         shape: Optional[torch.Size] = None,
+        train_alphas: bool = False,
         min_v_mem: Optional[float] = None,
-        norm_input: bool = True,
-        decay_early: bool = False,
+        norm_input: bool = False,
+        record_states: bool = False,
     ):
-        """
-        Exodus implementation of an integrator with exponential leak.
-
-        Parameters
-        ----------
-        tau_leak: float
-            Rate of leak of the state
-        shape: torch.Size
-            Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
-        min_v_mem: float or None
-            Lower bound for membrane potential v_mem, clipped at every time step.
-        norm_input: bool
-            If True, will normalise the inputs by tau_mem. This helps when training time constants.
-        decay_early: bool
-            If True, will scale inputs by exp(-1/tau). This corresponds to the Xylo-behavior of
-            decaying the input within the same time step.
-        """
-        super().__init__(state_names=["v_mem"])
-        self.tau_leak = torch.as_tensor(tau_leak, dtype=float)
-        self.alpha_leak = torch.exp(-1 / self.tau_leak)
-        self.min_v_mem = min_v_mem
-        self.norm_input = norm_input
-        self.decay_early = decay_early
-        if shape:
-            self.init_state_with_shape(shape)
-
-    def forward(self, input_current: "torch.tensor") -> "torch.tensor":
-        """
-        Forward pass.
-
-        Parameters
-        ----------
-        input_current : torch.tensor
-            Expected shape: (Batch, Time, *...)
-
-        Returns
-        -------
-        torch.tensor
-            ExpLeak layer states. Same shape as `input_current`
-        """
-
-        batch_size, time_steps, *trailing_dim = input_current.shape
-
-        # Ensure the neuron state are initialized
-        if not self.is_state_initialised() or not self.state_has_shape(
-            (batch_size, *trailing_dim)
-        ):
-            self.init_state_with_shape((batch_size, *trailing_dim))
-
-        # Reshape input to 2D -> (N, Time)
-        input_2d = input_current.movedim(1, -1).flatten(end_dim=-2).contiguous()
-
-        if self.norm_input:
-            # Rescale input with 1 - alpha
-            input_2d = (1.0 - self.alpha_leak) * input_2d
-
-        if self.decay_early:
-            # Rescale input with alpha
-            input_2d = self.alpha_leak * input_2d
-
-        # Actual evolution of states
-        states = LeakyIntegrator.apply(
-            input_2d, self.v_mem.flatten().contiguous(), self.alpha_leak
+        super().__init__(
+            tau_mem=tau_mem,
+            tau_syn=None,
+            spike_threshold=None,
+            train_alphas=train_alphas,
+            min_v_mem=min_v_mem,
+            shape=shape,
+            spike_fn=None,
+            reset_fn=None,
+            surrogate_grad_fn=None,
+            norm_input=norm_input,
+            record_states=record_states,
         )
-
-        # Reshape states to original shape -> (Batch, Time, ...)
-        states = states.reshape(*(batch_size, *trailing_dim), time_steps).movedim(-1, 1)
-
-        # Store current state based on last evolution time step
-        self.v_mem = states[:, -1, ...].clone()
-
-        self.tw = time_steps
-
-        return states
 
     @property
     def _param_dict(self) -> dict:
         param_dict = super()._param_dict
-        param_dict.pop("alpha_mem")
-        param_dict.update(
-            tau_mem=self.tau_mem,
-            norm_input=self.norm_input,
-            decay_early=self.decay_early,
-        )
-
+        param_dict.pop("tau_syn")
+        param_dict.pop("spike_fn")
+        param_dict.pop("reset_fn")
+        param_dict.pop("surrogate_grad_fn")
+        param_dict.pop("spike_threshold")
         return param_dict
 
 
