@@ -66,18 +66,18 @@ void lifForward(
 
 torch::Tensor lifBackward(
 	const torch::Tensor& surr,
-	const torch::Tensor& outGrad,
+	const torch::Tensor& outputGrad,
 	const torch::Tensor& notClipped,
 	const torch::Tensor& alpha,
-	float refr)
+	float membrSubtract)
 {
 	CHECK_INPUT(surr);
-	CHECK_INPUT(outGrad);
+	CHECK_INPUT(outputGrad);
 	CHECK_INPUT(notClipped);
 	CHECK_INPUT(alpha);
 
-	// check if tensor are in same device
-	CHECK_DEVICE(surr, outGrad);
+	// check if tensors are on same device
+	CHECK_DEVICE(surr, outputGrad);
 	CHECK_DEVICE(surr, notClipped);
 	CHECK_DEVICE(surr, alpha);
 
@@ -88,35 +88,35 @@ torch::Tensor lifBackward(
 	unsigned nNeurons = surr.size(0);
 
 	// input gradients
-	auto inGrad = torch::empty_like(surr);
+	auto inputGrad = torch::empty_like(surr);
 
 	lifBackwardCuda<float>(
-		inGrad.data_ptr<float>(),
-		outGrad.data_ptr<float>(),
+		inputGrad.data_ptr<float>(),
+		outputGrad.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
 		alpha.data_ptr<float>(),
-		refr, nNeurons, nTimesteps);
+		membrSubtract, nNeurons, nTimesteps);
 
-	return inGrad;
+	return inputGrad;
 }
 
 torch::Tensor lifBackwardAlpha(
 	const torch::Tensor& surr,
-	const torch::Tensor& outGrad,
+	const torch::Tensor& outputGrad,
 	const torch::Tensor& vmem,
 	const torch::Tensor& notClipped,
 	const torch::Tensor& alpha,
-	float refr)
+	float membrSubtract)
 {
 	CHECK_INPUT(surr);
-	CHECK_INPUT(outGrad);
+	CHECK_INPUT(outputGrad);
 	CHECK_INPUT(vmem);
 	CHECK_INPUT(notClipped);
 	CHECK_INPUT(alpha);
 
-	// check if tensor are in same device
-	CHECK_DEVICE(surr, outGrad);
+	// check if tensors are on same device
+	CHECK_DEVICE(surr, outputGrad);
 	CHECK_DEVICE(surr, vmem);
 	CHECK_DEVICE(surr, notClipped);
 	CHECK_DEVICE(surr, alpha);
@@ -128,16 +128,16 @@ torch::Tensor lifBackwardAlpha(
 	unsigned nNeurons = surr.size(0);
 
 	// input gradients
-	auto alphaGrad = torch::empty_like(surr);
+	auto alphaGrad = torch::empty_like(alpha);
 
 	lifBackwardAlphaCuda<float>(
 		alphaGrad.data_ptr<float>(),
-		outGrad.data_ptr<float>(),
+		outputGrad.data_ptr<float>(),
 		vmem.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
 		alpha.data_ptr<float>(),
-		refr, nNeurons, nTimesteps);
+		membrSubtract, nNeurons, nTimesteps);
 
 	return alphaGrad;
 }
@@ -148,15 +148,17 @@ torch::Tensor lifBackwardAlpha(
 torch::Tensor leakyForward(
 	const torch::Tensor& input,
 	const torch::Tensor& vmemInitial,
-    float alpha)
+    const torch::Tensor& alpha)
 {
 	CHECK_INPUT(input);
 	CHECK_INPUT(vmemInitial);
+	CHECK_INPUT(alpha);
 
-	// check if tensor are in same device
+	// check if tensors are on same device
 	CHECK_DEVICE(input, vmemInitial);
+	CHECK_DEVICE(input, alpha);
 
-	// set the current cuda device to wherever the tensor d_u resides
+	// set the current cuda device to wherever the tensor vmemInitial resides
 	cudaSetDevice(vmemInitial.device().index());
 
 	unsigned nTimesteps = input.size(-1);
@@ -169,32 +171,70 @@ torch::Tensor leakyForward(
 		vmemFull.data_ptr<float>(),
 		input.data_ptr<float>(),
 		vmemInitial.data_ptr<float>(),
-		alpha, nNeurons, nTimesteps);
+		alpha.data_ptr<float>(),
+		nNeurons, nTimesteps);
 
 	return vmemFull;
 }
 
 torch::Tensor leakyBackward(
-	const torch::Tensor& gradOutput,
-    float alpha)
+	const torch::Tensor& outputGrad,
+    const torch::Tensor& alpha)
 {
-	CHECK_INPUT(gradOutput);
+	CHECK_INPUT(outputGrad);
+	CHECK_INPUT(alpha);
 
-	// set the current cuda device to wherever the tensor d_u resides
-	cudaSetDevice(gradOutput.device().index());
+	// check if tensors are on same device
+	CHECK_DEVICE(outputGrad, alpha);
 
-	unsigned nTimesteps = gradOutput.size(-1);
-	unsigned nNeurons = gradOutput.size(0);
+	// set the current cuda device to wherever the tensor outputGrad resides
+	cudaSetDevice(outputGrad.device().index());
+
+	unsigned nTimesteps = outputGrad.size(-1);
+	unsigned nNeurons = outputGrad.size(0);
 
 	// Tensor to store input gradient
-	auto gradInput = torch::empty_like(gradOutput);
+	auto inputGrad = torch::empty_like(outputGrad);
 
 	leakyBackwardCuda<float>(
-		gradInput.data_ptr<float>(),
-		gradOutput.data_ptr<float>(),
-		alpha, nNeurons, nTimesteps);
+		inputGrad.data_ptr<float>(),
+		outputGrad.data_ptr<float>(),
+		alpha.data_ptr<float>(),
+		nNeurons, nTimesteps);
 
-	return gradInput;
+	return inputGrad;
+}
+
+torch::Tensor leakyBackwardAlpha(
+	const torch::Tensor& outputGrad,
+	const torch::Tensor& output,
+	const torch::Tensor& alpha)
+{
+	CHECK_INPUT(outputGrad);
+	CHECK_INPUT(output);
+	CHECK_INPUT(alpha);
+
+	// check if tensors are on same device
+	CHECK_DEVICE(outputGrad, output);
+	CHECK_DEVICE(outputGrad, alpha);
+
+	// set the current cuda device to wherever the tensor outputGrad resides
+	cudaSetDevice(outputGrad.device().index());
+
+	unsigned nTimesteps = outputGrad.size(-1);
+	unsigned nNeurons = outputGrad.size(0);
+
+	// Tensor to store alpha gradient
+	auto alphaGrad = torch::empty_like(alpha);
+
+	leakyBackwardAlphaCuda<float>(
+		alphaGrad.data_ptr<float>(),
+		outputGrad.data_ptr<float>(),
+		output.data_ptr<float>(),
+		alpha.data_ptr<float>(),
+		nNeurons, nTimesteps);
+
+	return alphaGrad;
 }
 
 
@@ -231,14 +271,14 @@ torch::Tensor spikeForward(
 }
 
 torch::Tensor spikeBackwardRefrCuda(
-	const torch::Tensor& surr, const torch::Tensor& outGrad, const torch::Tensor& refr)
+	const torch::Tensor& surr, const torch::Tensor& outputGrad, const torch::Tensor& refr)
 {
 	CHECK_INPUT(surr);
-	CHECK_INPUT(outGrad);
+	CHECK_INPUT(outputGrad);
 	CHECK_INPUT(refr);
 
-	// check if tensor are in same device
-	CHECK_DEVICE(surr, outGrad);
+	// check if tensors are on same device
+	CHECK_DEVICE(surr, outputGrad);
 	CHECK_DEVICE(surr, refr);
 
 	// set the current cuda device to wherever the tensor d_u resides
@@ -252,32 +292,32 @@ torch::Tensor spikeBackwardRefrCuda(
 	auto jaco = torch::zeros({nNeurons, nTimesteps, nTimesteps}, torch::dtype(torch::kFloat32).device(surr.device()));
 
 	// input gradients
-	auto inGrad = torch::zeros_like(surr);
+	auto inputGrad = torch::zeros_like(surr);
 
 	spikeBackwardRefr<float>(
-		inGrad.data_ptr<float>(),
-		outGrad.data_ptr<float>(),
+		inputGrad.data_ptr<float>(),
+		outputGrad.data_ptr<float>(),
 		jaco.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		refr.data_ptr<float>(),
 		nNeurons, refrSize, nTimesteps);
 
-	return inGrad;
+	return inputGrad;
 }
 
 torch::Tensor spikeBackward(
 	const torch::Tensor& surr,
-	const torch::Tensor& outGrad,
+	const torch::Tensor& outputGrad,
 	const torch::Tensor& notClipped,
 	float alpha,
 	float membrSubtract)
 {
 	CHECK_INPUT(surr);
-	CHECK_INPUT(outGrad);
+	CHECK_INPUT(outputGrad);
 	CHECK_INPUT(notClipped);
 
-	// check if tensor are in same device
-	CHECK_DEVICE(surr, outGrad);
+	// check if tensors are on same device
+	CHECK_DEVICE(surr, outputGrad);
 	CHECK_DEVICE(surr, notClipped);
 
 	// set the current cuda device to wherever the tensor d_u resides
@@ -287,16 +327,16 @@ torch::Tensor spikeBackward(
 	unsigned nNeurons = surr.size(0);
 
 	// input gradients
-	auto inGrad = torch::empty_like(surr);
+	auto inputGrad = torch::empty_like(surr);
 
 	spikeBackwardCuda<float>(
-		inGrad.data_ptr<float>(),
-		outGrad.data_ptr<float>(),
+		inputGrad.data_ptr<float>(),
+		outputGrad.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
 		alpha, membrSubtract, nNeurons, nTimesteps);
 
-	return inGrad;
+	return inputGrad;
 }
 
 
@@ -310,4 +350,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 	m.def("lifForward" 	     ,  &lifForward       , "LIF forward dynamics");
 	m.def("leakyForward"     ,  &leakyForward     ,	"Forward pass of leaky integrator");
 	m.def("leakyBackward"    ,  &leakyBackward    ,	"Backward pass of leaky integrator");
+	m.def("leakyBackwardAlpha", &leakyBackwardAlpha,"Backward pass of leaky integrator for alphas");
 }

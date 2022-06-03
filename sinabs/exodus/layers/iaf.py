@@ -1,5 +1,6 @@
-import torch
 from typing import Callable, Optional
+import torch
+import numpy as np
 from sinabs.layers import SqueezeMixin
 from sinabs.activation import (
     MultiSpike,
@@ -56,6 +57,7 @@ class IAF(LIF):
         min_v_mem: Optional[float] = None,
         shape: Optional[torch.Size] = None,
         record_states: bool = False,
+        decay_early: bool = False,
     ):
         super().__init__(
             tau_mem=np.inf,
@@ -68,13 +70,14 @@ class IAF(LIF):
             shape=shape,
             norm_input=False,
             record_states=record_states,
+            decay_early=decay_early,
         )
-        # IAF does not have time constants
-        self.tau_mem = None
+        # deactivate tau_mem being learned
+        self.tau_mem.requires_grad = False
 
     @property
     def alpha_mem_calculated(self):
-        return torch.tensor(1.)
+        return torch.tensor(1.).to(self.tau_mem.device)
 
     @property
     def _param_dict(self) -> dict:

@@ -296,13 +296,13 @@ class ExodusLIFModel(nn.Sequential):
     ):
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            el.ExpLeak(tau_leak=tau_leak, norm_input=True),
+            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
             el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(16, 32, bias=False),
-            el.ExpLeak(tau_leak=tau_leak, norm_input=True),
+            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
             el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(32, n_output_classes, bias=False),
-            el.ExpLeak(tau_leak=tau_leak, norm_input=True),
+            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
             el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
         )
 

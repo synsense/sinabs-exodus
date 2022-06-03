@@ -17,7 +17,7 @@
  *
  * Forward evolution for a single IAF or LIF neuron, over time. Including state decay,
  * spike generation and subtract mechanism. No synaptic dynamics.
- * vmem_t = alpha * (vmem_{t-1} - spikes_{t-1}) + input_t
+ * vmem_t = \alpha * (vmem_{t-1} - spikes_{t-1}) + input_t
  * spikes_t = (vmem_t // theta) * (vmem_t > 0)
  *
  * @param outputSpikes 2D-tensor (nNeurons x nTimesteps) to which the computed output spikes
@@ -106,7 +106,7 @@ __global__ void lifForwardKernel(
  *
  * inputGrad_i = surr_i * outputGrad_i * notClipped_{i} +
  *               \sum_{j=i+1}^{nTimesteps - 1} outputGrad_j * surr_j *
- *               * \prod_{k=i}^{j-1} (alpha - surr_k * membrSubtract) * notClipped_{k}
+ *               * \prod_{k=i}^{j-1} (\alpha - surr_k * membrSubtract) * notClipped_{k}
  * @param inputGrad 2D-tensor (nNeurons x nTimesteps) to which the computed
  *                  input gradients are to be written
  * @param outputGrad 2D-tensor (nNeurons x nTimesteps) that holds the given output gradients
@@ -177,10 +177,10 @@ __global__ void lifBackwardKernel(
  * for one neuron and/or batch.
  * It amounts to the scalar product of the output gradient with the derivative of
  * the spike output wrt. alpha.
- * alphaGrad = sum_{i=0}^{nTimesteps - 1} d(out_j) / d(alhpa) * outputGrad_j
- * d(out_j) / d(alhpa) = accGrad_j * surr_j
+ * alphaGrad = \sum_{i=0}^{nTimesteps - 1} d(out_j) / d(alhpa) * outputGrad_j
+ * \frac{d out_j}{d \alhpa} = accGrad_j * surr_j
  * accGrad_0 = 0,
- * accGrad_{j+1} = notClipped_{j+1} * (accGrad_j * (alpha - surr_j * membrSubtract) + vmem_j)
+ * accGrad_{j+1} = notClipped_{j+1} * (accGrad_j * (\alpha - surr_j * membrSubtract) + vmem_j)
  * @param alphaGrad 1D-tensor (nNeurons) to which the computed
  *                  alpha gradients are to be written
  * @param outputGrad 2D-tensor (nNeurons x nTimesteps) that holds the given output gradients
@@ -250,10 +250,10 @@ __global__ void lifBackwardAlphaKernel(
  *
  * Forward evolution for IAF or LIF neurons, including state decay, spike generation
  * and subtract mechanism. No synaptic dynamics.
- * vmem_t = alpha * (vmem_{t-1} - spikes_{t-1}) + input_t
+ * vmem_t = \alpha * (vmem_{t-1} - spikes_{t-1}) + input_t
  * spikes_t = (vmem_t // theta) * (vmem_t > 0)
  *
- * For IAF dynamics set alpha = 1, for LIF 0 < alpha < 1
+ * For IAF dynamics set \alpha = 1, for LIF 0 < \alpha < 1
  *
  * Parallelize over neurons/batches
  *
@@ -359,7 +359,7 @@ void lifBackwardCuda(
     for(auto i=0; i<nGrid; ++i)
     {
         int startOffset = i * neuronsPerGrid;
-        unsigned neuronsInGrid = (startOffset + neuronsPerGrid <= nNeurons) ? neuronsPerGrid : nNeurons - startOffset;
+        int neuronsInGrid = (startOffset + neuronsPerGrid <= nNeurons) ? neuronsPerGrid : nNeurons - startOffset;
 
         if(neuronsInGrid < 0)   break;
 

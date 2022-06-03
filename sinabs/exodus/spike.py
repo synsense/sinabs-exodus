@@ -117,7 +117,6 @@ class IntegrateAndFire(torch.autograd.Function):
         min_v_mem: float,
         surrogate_grad_fn: Callable,
         max_num_spikes_per_bin: Optional[int] = None,
-        get_alpha_grads: bool = False,
     ):
         """
         Integrate membrane potential with or without leak. Then generate spikes and apply
@@ -147,8 +146,6 @@ class IntegrateAndFire(torch.autograd.Function):
         max_num_spikes_per_bin: int
             Maximum number of neurons that a neuron can emit per time step. Set None to
             remove limit (default).
-        get_alpha_grads: bool
-            If True, gradients for alpha will be calculated during backward call.
 
         Returns
         -------
@@ -189,8 +186,8 @@ class IntegrateAndFire(torch.autograd.Function):
             inp,
             v_mem_init,
             activations,
-            membrane_subtract,
             alpha,
+            membrane_subtract,
             threshold,
             min_v_mem if min_v_mem is not None else 0,
             min_v_mem is not None,
@@ -201,9 +198,8 @@ class IntegrateAndFire(torch.autograd.Function):
         ctx.min_v_mem = min_v_mem
         ctx.surrogate_grad_fn = surrogate_grad_fn
         ctx.membrane_subtract = membrane_subtract
-        ctx.alpha = alpha
-        ctx.save_for_backward(v_mem)
-        ctx.get_alpha_grads = get_alpha_grads
+        ctx.save_for_backward(v_mem, alpha)
+        ctx.get_alpha_grads = alpha.requires_grad
 
         return output_spikes, v_mem
 
@@ -215,7 +211,7 @@ class IntegrateAndFire(torch.autograd.Function):
                 "Direct Backpropagation through membrane potential is currently not supported."
             )
 
-        (v_mem,) = ctx.saved_tensors
+        (v_mem, alpha) = ctx.saved_tensors
 
         # Surrogate gradients
         surrogates = ctx.surrogate_grad_fn(v_mem, ctx.threshold)
@@ -231,8 +227,8 @@ class IntegrateAndFire(torch.autograd.Function):
             surrogates.contiguous(),
             grad_output.contiguous(),
             not_clipped.contiguous(),
-            ctx.membrane_subtract * ctx.alpha,
-            ctx.alpha,
+            alpha,
+            ctx.membrane_subtract,
         )
 
         # Gradient wrt alpha
@@ -240,10 +236,12 @@ class IntegrateAndFire(torch.autograd.Function):
             grad_alpha = exodus_cuda.lifBackwardAlpha(
                 surrogates.contiguous(),
                 grad_output.contiguous(),
-                v_mem.contiguous()
+                v_mem.contiguous(),
                 not_clipped.contiguous(),
-                ctx.membrane_subtract * ctx.alpha,
-                ctx.alpha,
+                alpha,
+                ctx.membrane_subtract,
             )
+        else:
+            grad_alpha = None
 
-        return (grad_input, grad_alpha, None, None, None, None, None, None, None, None)
+        return (grad_input, grad_alpha, None, None, None, None, None, None, None)

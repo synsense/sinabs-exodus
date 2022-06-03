@@ -11,14 +11,14 @@ def test_integratefire():
     surrogate_gradient_fn = sa.Heaviside(0)
 
     thr = 1
-    alpha = 0.9
+    alpha = torch.as_tensor(0.9).expand(v_mem_initial.shape).contiguous().cuda()
 
     out, v_mem = IntegrateAndFire.apply(
         inp,
-        thr,
         alpha,
         v_mem_initial,
         activations_initial,
+        thr,
         thr,
         -thr,
         surrogate_gradient_fn,
@@ -34,14 +34,14 @@ def test_integratefire_backprop_vmem():
     surrogate_gradient_fn = sa.Heaviside(0)
 
     thr = 1
-    alpha = 0.9
+    alpha = torch.as_tensor(0.9).expand(v_mem_initial.shape).contiguous().cuda()
 
     out, v_mem = IntegrateAndFire.apply(
         inp,
-        thr,
         alpha,
         v_mem_initial,
         activations_initial,
+        thr,
         thr,
         -thr,
         surrogate_gradient_fn,

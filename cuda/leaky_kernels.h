@@ -21,7 +21,8 @@
  * 			   are to be written
  * @param input 2D-tensor (nNeurons x nTimesteps) with the input
  * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
- * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
+ * @param alhpa 1D-tensor (nNeurons) with decay factor of the neuron state (exp(-dt/tau)).
+ * 		  For IAF neurons set to 1.
  * @param nNeurons Number of neurons/batches
  * @param nTimesteps Number of timesteps
 **/
@@ -30,7 +31,7 @@ __global__ void leakyForwardKernel(
 	scalarType* __restrict__ vmemAll,
 	const scalarType* __restrict__ input,
 	const scalarType* __restrict__ vmemInitial,
-	float alpha,
+	const scalarType* __restrict__ alpha,
 	unsigned nNeurons,
 	unsigned nTimesteps)
 {
@@ -43,7 +44,7 @@ __global__ void leakyForwardKernel(
 	for(unsigned t=0; t<nTimesteps; ++t){
 
 		// Decay state
-		vmemCurr *= alpha;
+		vmemCurr *= alpha[neuronID];
 
 		// ID of neuron and current timestep
 		unsigned linearID = t + neuronID * nTimesteps;
@@ -63,26 +64,26 @@ __global__ void leakyForwardKernel(
  * Using that 
  * \frac{dOut_j}{dIn_i} = alhpa^{j-i} if j>=i, else 0
  * and
- * gradInput_i = sum_{j=i}^{N_s-1} \frac{dOut_j}{dIn_i} gradOutput_j
- * = sum_{j=i}^{N_s-1} alpha^{j-i} * gradOutput_j
- * = alpha * sum_{j=i+1}^{N_s-1} alpha^{j-(i+1)} * gradOutput_j + gradOutput_i
- * gradInput can be calculated recursively as 
- * gradInput_i = alpha * gradInput_{i+1} + gradOutput_i
- * gradInput_{N_s-1} = gradOutput_{N_s-1}
+ * inputGrad_i = \sum_{j=i}^{N_s-1} \frac{dOut_j}{dIn_i} outputGrad_j
+ * = \sum_{j=i}^{N_s-1} alpha^{j-i} * outputGrad_j
+ * = alpha * \sum_{j=i+1}^{N_s-1} alpha^{j-(i+1)} * outputGrad_j + outputGrad_i
+ * inputGrad can be calculated recursively as
+ * inputGrad_i = alpha * inputGrad_{i+1} + outputGrad_i
+ * inputGrad_{N_s-1} = outputGrad_{N_s-1}
  *
- * @param vmem 2D-tensor (nNeurons x nTimesteps) to which the computed membrane potentials
- * 			   are to be written
- * @param input 2D-tensor (nNeurons x nTimesteps) with the input
- * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
- * @param alhpa Decay factor of the neuron state (exp(-dt/tau)). For IAF neurons set to 1.
+ * @param inputGrad 2D-tensor (nNeurons x nTimesteps) to which the computed input gradients
+ * 		  are to be written
+ * @param outputGrad 2D-tensor (nNeurons x nTimesteps) with the output gradients
+ * @param alhpa 1D-tensor (nNeurons) with decay factor of the neuron state (exp(-dt/tau)).
+ * 		  For IAF neurons set to 1.
  * @param nNeurons Number of neurons/batches
  * @param nTimesteps Number of timesteps
 **/
 template <class scalarType>
 __global__ void leakyBackwardKernel(
-	scalarType* __restrict__ gradInput,
-	const scalarType* __restrict__ gradOutput,
-	float alpha,
+	scalarType* __restrict__ inputGrad,
+	const scalarType* __restrict__ outputGrad,
+	const scalarType* __restrict__ alpha,
 	unsigned nNeurons,
 	unsigned nTimesteps)
 {
@@ -90,18 +91,73 @@ __global__ void leakyBackwardKernel(
 
 	if(neuronID >= nNeurons)	return;
 
-	scalarType grad_curr = 0;
+    // Index of first element in current row of 2D tensors (i.e. for current neuron)
+    unsigned linearRowID = neuronID * nTimesteps;
+
+	scalarType grad = 0;
 
 	for(unsigned t=nTimesteps-1; t<nTimesteps; --t){
 
 		// ID of neuron and current timestep
-		unsigned linearID = t + neuronID * nTimesteps;
+		unsigned tIndex = t + linearRowID;
 
-		// Add corresponding element of gradOutput and multiply by alpha
-		grad_curr = grad_curr * alpha + gradOutput[linearID];
+		// Add corresponding element of outputGrad and multiply by alpha
+		grad = grad * alpha[neuronID] + outputGrad[tIndex];
 
-		// Write current grad into gradInput
-		gradInput[linearID] = grad_curr;
+		// Write current grad into inputGrad
+		inputGrad[tIndex] = grad;
+	}
+
+}
+
+
+/** Backward kernel for alpha gradients in leaky integrator dynamics.
+ *
+ * The gradients are given by
+ * \frac{d Out_t}{d \alpha} = \sum_{i=0}^{t-1} (t-i) \alpha^{t-i-1} In_i ,
+ * which can be calculated recursively as
+ * \frac{d Out_0}{d \alpha} = 0
+ * \frac{d Out_{t}}{d \alpha} = \alpha * frac{d Out_{t-1}{d \alpha} + Out_{t-1}
+ * because Out_{t} = \sum_{i=0}^{T} \alpha^{t-i} * In_i
+ *
+ * @param alphaGrad 1D-tensor (nNeurons) to which the computed alpha gradients
+ * 		  are to be written
+ * @param outputGrad 2D-tensor (nNeurons x nTimesteps) with the output gradients
+ * @param output 2D-tensor (nNeurons x nTimesteps) with the output of the forward pass
+ * @param alhpa 1D-tensor (nNeurons) with decay factor of the neuron state (exp(-dt/tau)).
+ * 		  For IAF neurons set to 1.
+ * @param nNeurons Number of neurons/batches
+ * @param nTimesteps Number of timesteps
+**/
+template <class scalarType>
+__global__ void leakyBackwardAlphaKernel(
+	scalarType* __restrict__ alphaGrad,
+	const scalarType* __restrict__ outputGrad,
+	const scalarType* __restrict__ output,
+	const scalarType* __restrict__ alpha,
+	unsigned nNeurons,
+	unsigned nTimesteps)
+{
+	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if(neuronID >= nNeurons)	return;
+
+    // Index of first element in current row of 2D tensors (i.e. for current neuron)
+    unsigned linearRowID = neuronID * nTimesteps;
+
+	// At t=0, gradient is 0
+	scalarType grad = 0;
+
+	for(unsigned t=1; t<nTimesteps; ++t){
+
+		// 2D-index of neuron and current timestep
+		unsigned tIndex = t + linearRowID;
+
+		// Scale previous grad with alpha and add output at previous timestep
+		grad = alpha[neuronID] * grad + output[tIndex - 1];
+
+		// Add corresponding element of outputGrad and multiply by alpha
+		alphaGrad[neuronID] = grad * outputGrad[tIndex];
 	}
 
 }
@@ -120,7 +176,9 @@ void leakyForwardCuda(
 	scalarType* vmemAll,
 	const scalarType* input,
 	const scalarType* vmemInitial,
-	float alpha, unsigned nNeurons, unsigned nTimesteps)
+	const scalarType* alpha,
+	unsigned nNeurons,
+	unsigned nTimesteps)
 {
 
 	unsigned thread = 256;
@@ -130,7 +188,8 @@ void leakyForwardCuda(
 			vmemAll,
 			input,
 			vmemInitial,
-			alpha, nNeurons, nTimesteps);
+			alpha,
+			nNeurons, nTimesteps);
 }
 
 /** Backward pass for exponential leak
@@ -142,7 +201,9 @@ template <class scalarType>
 void leakyBackwardCuda(
 	scalarType* inputGrad,
 	const scalarType* outputGrad,
-	float alpha, unsigned nNeurons, unsigned nTimesteps)
+	const scalarType* alpha,
+	unsigned nNeurons,
+	unsigned nTimesteps)
 {
 
 	unsigned thread = 256;
@@ -151,7 +212,34 @@ void leakyBackwardCuda(
 	leakyBackwardKernel<scalarType><<< block, thread >>>(
 			inputGrad,
 			outputGrad,
-			alpha, nNeurons, nTimesteps);
+			alpha,
+			nNeurons, nTimesteps);
+}
+
+/** Backward pass for exponential leak to get alpha gradients
+ *
+ * v_t = alpha * v_{t-1} + I_t
+ * Parallelize across neurons/batches
+ */
+template <class scalarType>
+void leakyBackwardAlphaCuda(
+	scalarType* alphaGrad,
+	const scalarType* outputGrad,
+	const scalarType* output,
+	const scalarType* alpha,
+	unsigned nNeurons,
+	unsigned nTimesteps)
+{
+
+	unsigned thread = 256;
+	unsigned block  = ceil(1.0f * nNeurons / thread);
+
+	leakyBackwardAlphaKernel<scalarType><<< block, thread >>>(
+			alphaGrad,
+			outputGrad,
+			output,
+			alpha,
+			nNeurons, nTimesteps);
 }
 
 

@@ -1,7 +1,7 @@
 import torch
-from sinabs.exodus.leaky import LeakyIntegrator
-from sinabs.layers import StatefulLayer, SqueezeMixin
 from typing import Union, Optional
+from sinabs.layers import SqueezeMixin
+from sinabs.exodus.layers import LIF
 
 
 class ExpLeak(LIF):
@@ -39,6 +39,7 @@ class ExpLeak(LIF):
         min_v_mem: Optional[float] = None,
         norm_input: bool = False,
         record_states: bool = False,
+        decay_early: bool = False,
     ):
         super().__init__(
             tau_mem=tau_mem,
@@ -52,6 +53,7 @@ class ExpLeak(LIF):
             surrogate_grad_fn=None,
             norm_input=norm_input,
             record_states=record_states,
+            decay_early=decay_early,
         )
 
     @property

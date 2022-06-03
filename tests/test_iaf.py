@@ -210,7 +210,9 @@ def test_exodus_vs_sinabs_compare_grads():
     exodus_out = exodus_model(input_data)
     loss_exodus = torch.nn.functional.mse_loss(exodus_out, torch.ones_like(exodus_out))
     loss_exodus.backward()
-    grads_exodus = [p.grad.data.clone() for p in exodus_model.parameters()]
+    grads_exodus = [
+        p.grad.data.clone() for p in exodus_model.parameters() if p.grad is not None
+    ]
     print(f"Runtime exodus: {time.time() - t_start}")
 
     # for (l_sin, l_slyr) in zip(

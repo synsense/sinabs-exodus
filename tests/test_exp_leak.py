@@ -5,9 +5,9 @@ import sinabs.exodus.layers as el
 
 def test_leaky_basic():
     time_steps = 100
-    tau_leak = torch.tensor(30.0)
+    tau_mem = torch.tensor(30.0)
     input_current = torch.rand(time_steps, 2, 7, 7).cuda()
-    layer = el.ExpLeak(tau_leak=tau_leak).cuda()
+    layer = el.ExpLeak(tau_mem=tau_mem).cuda()
     membrane_output = layer(input_current)
 
     assert not layer.does_spike
@@ -18,25 +18,27 @@ def test_leaky_basic():
 
 def test_leaky_basic_early_decay():
     time_steps = 100
-    tau_leak = torch.tensor(30.0)
+    tau_mem = torch.tensor(30.0)
     input_current = torch.rand(time_steps, 2, 7, 7).cuda()
-    layer_dec = el.ExpLeak(tau_leak=tau_leak, decay_early=True).cuda()
-    layer = el.ExpLeak(tau_leak=tau_leak).cuda()
+    layer_dec = el.ExpLeak(tau_mem=tau_mem, decay_early=True).cuda()
+    layer = el.ExpLeak(tau_mem=tau_mem).cuda()
     membrane_output = layer(input_current)
     membrane_output_dec = layer_dec(input_current)
 
     assert input_current.shape == membrane_output_dec.shape
     assert torch.isnan(membrane_output_dec).sum() == 0
     assert membrane_output_dec.sum() > 0
-    assert torch.allclose(membrane_output_dec, membrane_output * layer_dec.alpha_leak)
+    assert torch.allclose(
+        membrane_output_dec, membrane_output * layer_dec.alpha_mem_calculated
+    )
 
 
 def test_leaky_squeezed():
     batch_size = 10
     time_steps = 100
-    tau_leak = torch.tensor(30.0)
+    tau_mem = torch.tensor(30.0)
     input_current = torch.rand(batch_size * time_steps, 2, 7, 7).cuda()
-    layer = el.ExpLeakSqueeze(tau_leak=tau_leak, batch_size=batch_size).cuda()
+    layer = el.ExpLeakSqueeze(tau_mem=tau_mem, batch_size=batch_size).cuda()
     membrane_output = layer(input_current)
 
     assert input_current.shape == membrane_output.shape
@@ -47,11 +49,11 @@ def test_leaky_squeezed():
 def test_leaky_membrane_decay():
     batch_size = 10
     time_steps = 100
-    tau_leak = torch.tensor(30.0)
-    alpha = torch.exp(-1 / tau_leak)
+    tau_mem = torch.tensor(30.0)
+    alpha = torch.exp(-1 / tau_mem)
     input_current = torch.zeros(batch_size, time_steps, 2, 7, 7).cuda()
     input_current[:, 0] = 1 / (1 - alpha)  # only inject current in the first time step
-    layer = el.ExpLeak(tau_leak=tau_leak).cuda()
+    layer = el.ExpLeak(tau_mem=tau_mem, norm_input=True).cuda()
     membrane_output = layer(input_current)
 
     # first time step is not decayed
@@ -72,9 +74,9 @@ def test_leaky_membrane_decay():
 def test_exodus_sinabs_layer_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels = 16
-    tau_leak = 10.0
-    sinabs_model = sl.ExpLeak(tau_mem=tau_leak, norm_input=True).cuda()
-    exodus_model = el.ExpLeak(tau_leak=tau_leak, norm_input=True).cuda()
+    tau_mem = 10.0
+    sinabs_model = sl.ExpLeak(tau_mem=tau_mem, norm_input=True).cuda()
+    exodus_model = el.ExpLeak(tau_mem=tau_mem, norm_input=True).cuda()
     input_data = torch.zeros((batch_size, time_steps, n_input_channels)).cuda()
     input_data[:, :10] = 1e4
     output_sinabs = sinabs_model(input_data)
