@@ -1,4 +1,5 @@
 import time
+import pytest
 import torch
 import torch.nn as nn
 import sinabs.exodus.layers as el
@@ -188,7 +189,9 @@ def test_exodus_sinabs_model_equal_output():
     assert (spike_output_sinabs == spike_output_exodus).all()
 
 
-def test_exodus_vs_sinabs_compare_grads():
+alpha_ids = ["train_taus", "train_alphas"]
+@pytest.mark.parametrize("train_alphas", (False, True), ids=alpha_ids)
+def test_exodus_vs_sinabs_compare_grads(train_alphas):
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
@@ -199,12 +202,14 @@ def test_exodus_vs_sinabs_compare_grads():
         tau_leak=tau_leak,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        train_alphas=train_alphas,
     ).cuda()
     exodus_model = ExodusLIFModel(
         tau_mem,
         tau_leak=tau_leak,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        train_alphas=train_alphas,
     ).cuda()
 
     # make sure the weights for linear layers are the same
@@ -214,8 +219,8 @@ def test_exodus_vs_sinabs_compare_grads():
         sinabs_layer.load_state_dict(exodus_layer.state_dict())
     assert (sinabs_model[0].weight == exodus_model[0].weight).all()
 
-    for layer in sinabs_model.spiking_layers:
-        layer.tau_mem.requires_grad = False
+    # for layer in sinabs_model.spiking_layers:
+    #     layer.tau_mem.requires_grad = False
 
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda()
 
@@ -254,17 +259,45 @@ class SinabsLIFModel(nn.Sequential):
         n_output_classes=10,
         threshold=1.0,
         min_v_mem=None,
+        train_alphas=False,
     ):
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
-            sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
+            sl.ExpLeak(
+                tau_mem=torch.ones((16, )) * tau_leak,
+                norm_input=True,
+                train_alphas=train_alphas,
+            ),
+            sl.LIF(
+                tau_mem=torch.ones((n_input_channels,)) * tau_mem,
+                spike_threshold=threshold,
+                min_v_mem=min_v_mem,
+                train_alphas=train_alphas,
+            ),
             nn.Linear(16, 32, bias=False),
-            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
-            sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
+            sl.ExpLeak(
+                tau_mem=torch.ones((32, )) * tau_leak,
+                norm_input=True,
+                train_alphas=train_alphas,
+            ),
+            sl.LIF(
+                tau_mem=torch.ones((32,)) * tau_mem,
+                spike_threshold=threshold,
+                min_v_mem=min_v_mem,
+                train_alphas=train_alphas,
+            ),
             nn.Linear(32, n_output_classes, bias=False),
-            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
-            sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
+            sl.ExpLeak(
+                tau_mem=torch.ones((n_output_classes, )) * tau_leak,
+                norm_input=True,
+                train_alphas=train_alphas,
+            ),
+            sl.LIF(
+                tau_mem=torch.ones((n_output_classes,)) * tau_mem,
+                spike_threshold=threshold,
+                min_v_mem=min_v_mem,
+                train_alphas=train_alphas,
+            ),
         )
 
     def reset_states(self):
@@ -293,17 +326,45 @@ class ExodusLIFModel(nn.Sequential):
         n_output_classes=10,
         threshold=1.0,
         min_v_mem=None,
+        train_alphas=False,
     ):
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
-            el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
+            el.ExpLeak(
+                tau_mem=torch.ones((16, )) * tau_leak,
+                norm_input=True,
+                train_alphas=train_alphas,
+            ),
+            el.LIF(
+                tau_mem=torch.ones((n_input_channels,)) * tau_mem,
+                spike_threshold=threshold,
+                min_v_mem=min_v_mem,
+                train_alphas=train_alphas,
+            ),
             nn.Linear(16, 32, bias=False),
-            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
-            el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
+            el.ExpLeak(
+                tau_mem=torch.ones((32, )) * tau_leak,
+                norm_input=True,
+                train_alphas=train_alphas,
+            ),
+            el.LIF(
+                tau_mem=torch.ones((32,)) * tau_mem,
+                spike_threshold=threshold,
+                min_v_mem=min_v_mem,
+                train_alphas=train_alphas,
+            ),
             nn.Linear(32, n_output_classes, bias=False),
-            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
-            el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
+            el.ExpLeak(
+                tau_mem=torch.ones((n_output_classes, )) * tau_leak,
+                norm_input=True,
+                train_alphas=train_alphas,
+            ),
+            el.LIF(
+                tau_mem=torch.ones((n_output_classes,)) * tau_mem,
+                spike_threshold=threshold,
+                min_v_mem=min_v_mem,
+                train_alphas=train_alphas,
+            ),
         )
 
     def reset_states(self):

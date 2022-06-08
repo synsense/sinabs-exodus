@@ -120,6 +120,24 @@ class LIF(LIFSinabs):
             self.max_num_spikes_per_bin = 1
 
     def _prepare_input(self, input_data: torch.Tensor):
+        """
+        Make sure neuron states are initialized in correct shape.
+        Reshape input to 2D
+
+        Parameters
+        ----------
+        input_data: torch.tensor
+            Input of shape (batch_size, time_steps, *trailing_dim)
+
+        Returns
+        -------
+        torch.tensor
+            Input, reshaped to (N, time_steps), where N is the product of
+            batch_size and all trailing dimensions.
+        tuple of int
+            Original shape of input
+        """
+
         batch_size, time_steps, *trailing_dim = input_data.shape
 
         # Ensure the neuron state are initialized
@@ -132,17 +150,17 @@ class LIF(LIFSinabs):
         # Flatten out all dimensions that can be processed in parallel and ensure contiguity
         input_2d = input_data.movedim(1, -1).reshape(-1, time_steps)
 
-        return input_2d, batch_size, time_steps, *trailing_dim
+        return input_2d, (batch_size, time_steps, *trailing_dim)
 
     def _forward_synaptic(self, input_2d: torch.Tensor):
         """Evolve synaptic dynamics"""
 
-        alpha_syn = self.alpha_syn_calculated.expand(input_2d[:, 0].shape).contiguous()
+        alpha_syn = self.alpha_syn_calculated.expand(self.v_mem.shape)
 
         # Apply exponential filter to input
         return LeakyIntegrator.apply(
             input_2d,  # Input data
-            alpha_syn,  # Synaptic alpha
+            alpha_syn.flatten().contiguous(),  # Synaptic alpha
             self.i_syn.flatten().contiguous(),  # Initial synaptic states
             self.decay_early,  # Early decay of synaptic current            self.train_alphas,  # Should grad for alphas be calculated
         )
@@ -151,17 +169,18 @@ class LIF(LIFSinabs):
         """Evolve membrane dynamics"""
 
         # Broadcast alpha to number of neurons (x batches)
-        alpha_mem = self.alpha_mem_calculated.expand(i_syn_2d[:, 0].shape).contiguous()
+        alpha_mem = self.alpha_mem_calculated.expand(self.v_mem.shape)
 
         if self.norm_input:
-            # Rescale input with 1 - alpha
-            i_syn_2d = (1.0 - alpha_mem.view(-1, 1)) * i_syn_2d
+            # Rescale input with 1 - alpha (based on approximation that
+            # alpha = exp(-1/tau) ~ 1 / (1 - tau) for tau >> 1)
+            i_syn_2d = (1.0 - alpha_mem.flatten().unsqueeze(1)) * i_syn_2d
 
         if self.spike_fn is None:
             # - Non-spiking case (leaky integrator)
             v_mem = LeakyIntegrator.apply(
                 i_syn_2d,  # Input data
-                alpha_mem,  # Membrane alpha
+                alpha_mem.flatten().contiguous(),  # Membrane alpha
                 self.v_mem.flatten().contiguous(),  # Initial vmem
                 self.decay_early,  # Early decay of membrane potential
             )
@@ -170,7 +189,7 @@ class LIF(LIFSinabs):
 
         return IntegrateAndFire.apply(
             i_syn_2d.contiguous(),  # Input data
-            alpha_mem,  # Alphas
+            alpha_mem.flatten().contiguous(),  # Alphas
             self.v_mem.flatten().contiguous(),  # Initial vmem
             self.activation.flatten(),  # Initial activations
             self.spike_threshold,  # Spike threshold
@@ -193,14 +212,13 @@ class LIF(LIFSinabs):
                 Output data. Same shape as `input_data`.
         """
 
-        input_2d, batch_size, time_steps, *trailing_dim = self._prepare_input(
-            input_data
-        )
+        input_2d, original_shape = self._prepare_input(input_data)
+        batch_size, time_steps, *trailing_dim = original_shape
 
         self.recordings = dict()
 
         # - Synaptic dynamics
-        if self.tau_syn is None:
+        if self.tau_syn_calculated is None:
             i_syn_2d = input_2d
         else:
             i_syn_2d = self._forward_synaptic(input_2d)
