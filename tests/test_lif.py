@@ -1,4 +1,5 @@
 import time
+import pytest
 import torch
 import torch.nn as nn
 import sinabs.exodus.layers as el
@@ -155,7 +156,8 @@ def test_exodus_model():
     assert spike_output.sum() > 0
 
 
-def test_exodus_sinabs_model_equal_output():
+@pytest.mark.parametrize("norm_input", (True, False))
+def test_exodus_sinabs_model_equal_output(norm_input):
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
@@ -166,12 +168,14 @@ def test_exodus_sinabs_model_equal_output():
         tau_leak=tau_leak,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        norm_input=norm_input,
     ).cuda()
     exodus_model = ExodusLIFModel(
         tau_mem,
         tau_leak=tau_leak,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        norm_input=norm_input,
     ).cuda()
     # make sure the weights for linear layers are the same
     for (sinabs_layer, exodus_layer) in zip(
@@ -188,7 +192,8 @@ def test_exodus_sinabs_model_equal_output():
     assert (spike_output_sinabs == spike_output_exodus).all()
 
 
-def test_exodus_vs_sinabs_compare_grads():
+@pytest.mark.parametrize("norm_input", (True, False))
+def test_exodus_vs_sinabs_compare_grads(norm_input):
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
@@ -199,12 +204,14 @@ def test_exodus_vs_sinabs_compare_grads():
         tau_leak=tau_leak,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        norm_input=norm_input,
     ).cuda()
     exodus_model = ExodusLIFModel(
         tau_mem,
         tau_leak=tau_leak,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        norm_input=norm_input,
     ).cuda()
 
     # make sure the weights for linear layers are the same
@@ -254,16 +261,17 @@ class SinabsLIFModel(nn.Sequential):
         n_output_classes=10,
         threshold=1.0,
         min_v_mem=None,
+        norm_input=True,
     ):
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            sl.ExpLeak(tau_mem=tau_leak, norm_input=norm_input),
             sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(16, 32, bias=False),
-            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            sl.ExpLeak(tau_mem=tau_leak, norm_input=norm_input),
             sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(32, n_output_classes, bias=False),
-            sl.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            sl.ExpLeak(tau_mem=tau_leak, norm_input=norm_input),
             sl.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
         )
 
@@ -293,16 +301,17 @@ class ExodusLIFModel(nn.Sequential):
         n_output_classes=10,
         threshold=1.0,
         min_v_mem=None,
+        norm_input=True,
     ):
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
-            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            el.ExpLeak(tau_mem=tau_leak, norm_input=norm_input),
             el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(16, 32, bias=False),
-            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            el.ExpLeak(tau_mem=tau_leak, norm_input=norm_input),
             el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
             nn.Linear(32, n_output_classes, bias=False),
-            el.ExpLeak(tau_mem=tau_leak, norm_input=True),
+            el.ExpLeak(tau_mem=tau_leak, norm_input=norm_input),
             el.LIF(tau_mem=tau_mem, spike_threshold=threshold, min_v_mem=min_v_mem),
         )
 
