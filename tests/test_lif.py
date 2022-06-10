@@ -7,8 +7,8 @@ import sinabs.layers as sl
 import sinabs.activation as sa
 
 
-atol = 1e-2
-rtol = 1e-2
+atol = 1e-8
+rtol = 1e-3
 
 
 def test_lif_basic():
@@ -228,7 +228,9 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas):
     sinabs_out = sinabs_model(input_data)
     loss_sinabs = torch.nn.functional.mse_loss(sinabs_out, torch.ones_like(sinabs_out))
     loss_sinabs.backward()
-    grads_sinabs = [lyr.weight.grad.data.float() for lyr in sinabs_model.linear_layers]
+    grads_sinabs = {
+        k: p.grad for k, p in sinabs_model.named_parameters() if p.grad is not None
+    }
     print(f"Runtime sinabs: {time.time() - t_start}")
 
     exodus_model.zero_grad()
@@ -236,7 +238,9 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas):
     exodus_out = exodus_model(input_data)
     loss_exodus = torch.nn.functional.mse_loss(exodus_out, torch.ones_like(exodus_out))
     loss_exodus.backward()
-    grads_exodus = [lyr.weight.grad.data.float() for lyr in exodus_model.linear_layers]
+    grads_exodus = {
+        k: p.grad for k, p in exodus_model.named_parameters() if p.grad is not None
+    }
     print(f"Runtime exodus: {time.time() - t_start}")
 
     for (l_sin, l_slyr) in zip(
@@ -246,8 +250,8 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas):
 
     assert (sinabs_out == exodus_out).all()
 
-    for g0, g1 in zip(grads_sinabs, grads_exodus):
-        assert torch.allclose(g0, g1, atol=atol, rtol=rtol)
+    for k, g_sin in grads_sinabs.items():
+        assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=rtol)
 
 
 class SinabsLIFModel(nn.Sequential):
