@@ -30,7 +30,8 @@
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
  * @param theta Firing threshold
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param membrSubtract 1D tensor with values that are subtracted from the membrane
+ *        potential when spiking
  * @param thetaLow Lower bound to vmem
  * @param applyThetaLow Flag whether vmem is lower bounded
  * @param maxNumSpikes Maximum number of spikes a neuron can emit per time step
@@ -45,7 +46,7 @@ __global__ void lifForwardKernel(
 	const scalarType* __restrict__ vmemInitial,
 	const scalarType* __restrict__ activationsPrev,
     const scalarType* __restrict__ alpha,
-	float membrSubtract,
+	const scalarType* __restrict__ membrSubtract,
 	float theta,
 	float thetaLow,
 	bool applyThetaLow,
@@ -62,7 +63,7 @@ __global__ void lifForwardKernel(
 
 	for(unsigned t=0; t<nTimesteps; ++t){
 		// Subtract spikes
-		vmemCurr -= activation * membrSubtract;
+		vmemCurr -= activation * membrSubtract[neuronID];
 
 		// Decay state
 		vmemCurr *= alpha[neuronID];
@@ -115,7 +116,8 @@ __global__ void lifForwardKernel(
  * @param notClipped 2D-tensor (nNeurons x nTimesteps) indicating whether vmem has been clipped
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param membrSubtract 1D-tensor of value that is subtracted from the membrane potential
+ *        when spiking
  * @param nNeurons Number of neurons/batches
  * @param nTimesteps Number of timesteps
  */
@@ -126,9 +128,9 @@ __global__ void lifBackwardKernel(
     const scalarType* __restrict__ surr,
     const scalarType* __restrict__ notClipped,
     const scalarType* __restrict__ alpha,
-    float membrSubtract,
-    unsigned nNeurons,
-    unsigned nTimesteps)
+    const scalarType* __restrict__ membrSubtract,
+    const unsigned nNeurons,
+    const unsigned nTimesteps)
 {
     // Identifier corresponding to the element of the input gradient that is
     // computed as well as the denominator in the derivatives
@@ -160,7 +162,7 @@ __global__ void lifBackwardKernel(
         // ID for current surrogate gradient and output gradient
         jIndex = j + linearRowID;
         // New factor to be accumulated
-        newFactor = alpha[neuronID] - membrSubtract * surr[jIndex - 1];
+        newFactor = alpha[neuronID] - membrSubtract[neuronID] * surr[jIndex - 1];
         accGrad *= (newFactor * notClipped[jIndex]);
         // Add new term to current gradient
         inputGrad[iIndex] += accGrad * surr[jIndex] * outputGrad[jIndex];
@@ -190,7 +192,8 @@ __global__ void lifBackwardKernel(
  * @param notClipped 2D-tensor (nNeurons x nTimesteps) indicating whether vmem has been clipped
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param membrSubtract 1D-tensor of value that is subtracted from the membrane potential
+ *        when spiking
  * @param nNeurons Number of neurons/batches
  * @param nTimesteps Number of timesteps
  */
@@ -202,9 +205,9 @@ __global__ void lifBackwardAlphaKernel(
     const scalarType* __restrict__ surr,
     const scalarType* __restrict__ notClipped,
     const scalarType* __restrict__ alpha,
-    float membrSubtract,
-    unsigned nNeurons,
-    unsigned nTimesteps)
+    const scalarType* __restrict__ membrSubtract,
+    const unsigned nNeurons,
+    const unsigned nTimesteps)
 {
     // Identifier for the current neuron and/or batch
     unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
@@ -229,7 +232,7 @@ __global__ void lifBackwardAlphaKernel(
         // ID for current surrogate gradient and output gradient
         jIndex = j + linearRowID;
         // Multiply dv_t / dv_{t-1} - term to accumulated gradient
-        accGrad *= alpha[neuronID] - membrSubtract * surr[jIndex - 1];
+        accGrad *= alpha[neuronID] - membrSubtract[neuronID] * surr[jIndex - 1];
         // Add membane potential
         accGrad += vmem[jIndex - 1];
         // Multiply with 0 if clipped
@@ -266,7 +269,8 @@ __global__ void lifBackwardAlphaKernel(
  * @param activationsPrev 1D-tensor (nNeurons) with the spikes of the preceding time step
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param membrSubtract 1D-tensor of value that is subtracted from the membrane potential
+ *        when spiking
  * @param theta Firing threshold
  * @param thetaLow Lower bound to vmem
  * @param applyThetaLow Flag whether vmem is lower bounded
@@ -282,7 +286,7 @@ void lifForwardCuda(
 	const scalarType* vmemInitial,
 	const scalarType* activationsPrev,
 	const scalarType* alpha,
-	const float membrSubtract,
+	const scalarType* membrSubtract,
 	const float theta,
 	const float thetaLow,
 	const bool applyThetaLow,
@@ -336,7 +340,8 @@ void lifForwardCuda(
  *                   result in 0 gradients at this point.
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param membrSubtract 1D-tensor of value that is subtracted from the membrane potential
+ *        when spiking
  * @param nNeurons Number of neurons/batches
  * @param nTimesteps Number of timesteps
  */
@@ -347,9 +352,9 @@ void lifBackwardCuda(
     const scalarType* surr,
     const scalarType* notClipped,
     const scalarType* alpha,
-    float membrSubtract,
-    unsigned nNeurons,
-    unsigned nTimesteps)
+    const scalarType* membrSubtract,
+    const unsigned nNeurons,
+    const unsigned nTimesteps)
 {
     dim3 thread(128, 8, 1);
 
@@ -377,7 +382,7 @@ void lifBackwardCuda(
             surr + startOffset * nTimesteps,
             notClipped + startOffset * nTimesteps,
             alpha + startOffset,
-            membrSubtract,
+            membrSubtract + startOffset,
             neuronsInGrid,
             nTimesteps);
     }
@@ -402,7 +407,8 @@ void lifBackwardCuda(
  *                   result in 0 gradients at this point.
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
- * @param membrSubtract Value that is subtracted from the membrane potential when spiking
+ * @param membrSubtract 1D-tensor of value that is subtracted from the membrane potential
+ *        when spiking
  * @param nNeurons Number of neurons/batches
  * @param nTimesteps Number of timesteps
  */
@@ -414,9 +420,9 @@ void lifBackwardAlphaCuda(
     const scalarType* surr,
     const scalarType* notClipped,
     const scalarType* alpha,
-    float membrSubtract,
-    unsigned nNeurons,
-    unsigned nTimesteps)
+    const scalarType* membrSubtract,
+    const unsigned nNeurons,
+    const unsigned nTimesteps)
 {
 
 

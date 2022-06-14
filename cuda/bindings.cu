@@ -18,11 +18,11 @@ void lifForward(
 	const torch::Tensor& vmemInitial,
 	const torch::Tensor& activationsPrev,
     const torch::Tensor& alpha,
-	float membrSubtract,
-	float theta,
-	float thetaLow,
-	bool applyThetaLow,
-	int maxNumSpikes)
+	const torch::Tensor& membrSubtract,
+	const float theta,
+	const float thetaLow,
+	const bool applyThetaLow,
+	const int maxNumSpikes)
 {
 	CHECK_INPUT(input);
 	CHECK_INPUT(outputSpikes);
@@ -30,6 +30,7 @@ void lifForward(
 	CHECK_INPUT(vmemInitial);
 	CHECK_INPUT(activationsPrev);
 	CHECK_INPUT(alpha);
+	CHECK_INPUT(membrSubtract);
 
 	// check if tensors are on same device
 	CHECK_DEVICE(input, vmem);
@@ -37,6 +38,7 @@ void lifForward(
 	CHECK_DEVICE(input, vmemInitial);
 	CHECK_DEVICE(input, activationsPrev);
 	CHECK_DEVICE(input, alpha);
+	CHECK_DEVICE(input, membrSubtract);
 
 	// set the current cuda device to wherever the tensor input resides
 	cudaSetDevice(input.device().index());
@@ -59,7 +61,8 @@ void lifForward(
 		vmemInitial.data_ptr<float>(),
 		activationsPrev.data_ptr<float>(),
 		alpha.data_ptr<float>(),
-		membrSubtract, theta, thetaLow, applyThetaLow, maxNumSpikesU, nNeurons, nTimesteps);
+		membrSubtract.data_ptr<float>(),
+		theta, thetaLow, applyThetaLow, maxNumSpikesU, nNeurons, nTimesteps);
 
 	return;
 }
@@ -69,17 +72,19 @@ torch::Tensor lifBackward(
 	const torch::Tensor& outputGrad,
 	const torch::Tensor& notClipped,
 	const torch::Tensor& alpha,
-	float membrSubtract)
+	const torch::Tensor& membrSubtract)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outputGrad);
 	CHECK_INPUT(notClipped);
 	CHECK_INPUT(alpha);
+	CHECK_INPUT(membrSubtract);
 
 	// check if tensors are on same device
 	CHECK_DEVICE(surr, outputGrad);
 	CHECK_DEVICE(surr, notClipped);
 	CHECK_DEVICE(surr, alpha);
+	CHECK_DEVICE(surr, membrSubtract);
 
 	// set the current cuda device to wherever the tensor surr resides
 	cudaSetDevice(surr.device().index());
@@ -96,7 +101,8 @@ torch::Tensor lifBackward(
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
 		alpha.data_ptr<float>(),
-		membrSubtract, nNeurons, nTimesteps);
+		membrSubtract.data_ptr<float>(),
+		nNeurons, nTimesteps);
 
 	return inputGrad;
 }
@@ -107,19 +113,21 @@ torch::Tensor lifBackwardAlpha(
 	const torch::Tensor& vmem,
 	const torch::Tensor& notClipped,
 	const torch::Tensor& alpha,
-	float membrSubtract)
+	const torch::Tensor& membrSubtract)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outputGrad);
 	CHECK_INPUT(vmem);
 	CHECK_INPUT(notClipped);
 	CHECK_INPUT(alpha);
+	CHECK_INPUT(membrSubtract);
 
 	// check if tensors are on same device
 	CHECK_DEVICE(surr, outputGrad);
 	CHECK_DEVICE(surr, vmem);
 	CHECK_DEVICE(surr, notClipped);
 	CHECK_DEVICE(surr, alpha);
+	CHECK_DEVICE(surr, membrSubtract);
 
 	// set the current cuda device to wherever the tensor surr resides
 	cudaSetDevice(surr.device().index());
@@ -137,7 +145,8 @@ torch::Tensor lifBackwardAlpha(
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
 		alpha.data_ptr<float>(),
-		membrSubtract, nNeurons, nTimesteps);
+		membrSubtract.data_ptr<float>(),
+		nNeurons, nTimesteps);
 
 	return alphaGrad;
 }
@@ -247,7 +256,7 @@ torch::Tensor spikeForward(
 	const float theta,
 	const float theta_low,
 	const bool applyThetaLow,
-	int maxNumSpikes)
+	const int maxNumSpikes)
 {
 	CHECK_INPUT(d_u);
 
@@ -309,8 +318,8 @@ torch::Tensor spikeBackward(
 	const torch::Tensor& surr,
 	const torch::Tensor& outputGrad,
 	const torch::Tensor& notClipped,
-	float alpha,
-	float membrSubtract)
+	const float alpha,
+	const float membrSubtract)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outputGrad);

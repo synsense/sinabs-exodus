@@ -170,30 +170,37 @@ class LIF(LIFSinabs):
 
         # Broadcast alpha to number of neurons (x batches)
         alpha_mem = self.alpha_mem_calculated.expand(self.v_mem.shape)
+        alpha_mem = alpha_mem.flatten().contiguous()
 
         if self.norm_input:
             # Rescale input with 1 - alpha (based on approximation that
             # alpha = exp(-1/tau) ~ 1 / (1 - tau) for tau >> 1)
-            i_syn_2d = (1.0 - alpha_mem.flatten().unsqueeze(1)) * i_syn_2d
+            i_syn_2d = (1.0 - alpha_mem.unsqueeze(1)) * i_syn_2d
 
         if self.spike_fn is None:
             # - Non-spiking case (leaky integrator)
             v_mem = LeakyIntegrator.apply(
                 i_syn_2d,  # Input data
-                alpha_mem.flatten().contiguous(),  # Membrane alpha
+                alpha_mem,  # Membrane alpha
                 self.v_mem.flatten().contiguous(),  # Initial vmem
                 self.decay_early,  # Early decay of membrane potential
             )
 
             return v_mem, v_mem
 
+        # Expand membrane subtract
+        membrane_subtract = self.reset_fn.subtract_value
+        if membrane_subtract is None:
+            membrane_subtract = self.spike_threshold
+        membrane_subtract = torch.full_like(alpha_mem, membrane_subtract)
+
         return IntegrateAndFire.apply(
             i_syn_2d.contiguous(),  # Input data
-            alpha_mem.flatten().contiguous(),  # Alphas
+            alpha_mem,  # Alphas
             self.v_mem.flatten().contiguous(),  # Initial vmem
             self.activation.flatten(),  # Initial activations
             self.spike_threshold,  # Spike threshold
-            self.spike_threshold,  # Membrane subtract
+            membrane_subtract,  # Membrane subtract
             self.min_v_mem,  # Lower bound on vmem
             self.surrogate_grad_fn,  # Surrogate gradient
             self.max_num_spikes_per_bin,  # Max. number of spikes per bin

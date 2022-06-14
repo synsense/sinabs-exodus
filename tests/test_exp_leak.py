@@ -1,3 +1,6 @@
+from itertools import product
+import time
+import pytest
 import torch
 import sinabs.layers as sl
 import sinabs.exodus.layers as el
@@ -85,3 +88,46 @@ def test_exodus_sinabs_layer_equal_output():
     assert output_sinabs.shape == output_exodus.shape
     assert (output_sinabs != 0).any()
     assert torch.allclose(output_sinabs, output_exodus)
+
+
+atol = 1e-8
+rtol = 1e-3
+
+args = product((True, False), (True, False))
+@pytest.mark.parametrize("train_alphas,norm_input", args)
+def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input):
+    batch_size, time_steps = 10, 100
+    n_input_channels = 16
+    tau_mem = 10.0
+    sinabs_model = sl.ExpLeak(
+        tau_mem=tau_mem, norm_input=norm_input, train_alphas=train_alphas
+    ).cuda()
+    exodus_model = el.ExpLeak(
+        tau_mem=tau_mem, norm_input=norm_input, train_alphas=train_alphas
+    ).cuda()
+    input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda()
+
+    t_start = time.time()
+    sinabs_out = sinabs_model(input_data)
+    loss_sinabs = torch.nn.functional.mse_loss(sinabs_out, torch.ones_like(sinabs_out))
+    loss_sinabs.backward()
+    grads_sinabs = {
+        k: p.grad for k, p in sinabs_model.named_parameters() if p.grad is not None
+    }
+    print(f"Runtime sinabs: {time.time() - t_start}")
+
+    exodus_model.zero_grad()
+    t_start = time.time()
+    exodus_out = exodus_model(input_data)
+    loss_exodus = torch.nn.functional.mse_loss(exodus_out, torch.ones_like(exodus_out))
+    loss_exodus.backward()
+    grads_exodus = {
+        k: p.grad for k, p in exodus_model.named_parameters() if p.grad is not None
+    }
+    print(f"Runtime exodus: {time.time() - t_start}")
+
+    assert torch.allclose(sinabs_model.v_mem, exodus_model.v_mem, atol=atol, rtol=rtol)
+    assert torch.allclose(sinabs_out, exodus_out)
+
+    for k, g_sin in grads_sinabs.items():
+        assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=rtol)

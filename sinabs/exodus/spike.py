@@ -113,7 +113,7 @@ class IntegrateAndFire(torch.autograd.Function):
         v_mem_init: torch.tensor,
         activations: torch.tensor,
         threshold: float,
-        membrane_subtract: float,
+        membrane_subtract: torch.tensor,
         min_v_mem: float,
         surrogate_grad_fn: Callable,
         max_num_spikes_per_bin: Optional[int] = None,
@@ -137,8 +137,8 @@ class IntegrateAndFire(torch.autograd.Function):
             Has to be contiguous.
         threshold: float
             Firing threshold
-        membrane_subtract: float
-            Value that is subracted from membrane potential after spike
+        membrane_subtract: torch.Tensor
+            1D, shape (N,). Value that is subracted from membrane potential after spike
         min_v_mem: float
             Lower limit for v_mem
         surrogate_grad_fn: Callable
@@ -155,6 +155,9 @@ class IntegrateAndFire(torch.autograd.Function):
             Integer spike raster. Same shape as membrane potential
         """
 
+        if membrane_subtract is None:
+            membrane_subtract = torch.ones_like(alpha) * threshold
+
         if not inp.ndim == 2:
             raise ValueError("'inp' must be 2D, (N, Time)")
         if not inp.is_contiguous():
@@ -163,6 +166,10 @@ class IntegrateAndFire(torch.autograd.Function):
             raise ValueError("'alpha' must be 1D, (N,)")
         if not alpha.is_contiguous():
             raise ValueError("'alpha' has to be contiguous.")
+        if not membrane_subtract.ndim == 1:
+            raise ValueError("'membrane_subtract' must be 1D, (N,)")
+        if not membrane_subtract.is_contiguous():
+            raise ValueError("'membrane_subtract' has to be contiguous.")
         if not v_mem_init.ndim == 1:
             raise ValueError("'v_mem_init' must be 1D, (N,)")
         if not v_mem_init.is_contiguous():
@@ -197,7 +204,7 @@ class IntegrateAndFire(torch.autograd.Function):
         ctx.threshold = threshold
         ctx.min_v_mem = min_v_mem
         ctx.surrogate_grad_fn = surrogate_grad_fn
-        ctx.membrane_subtract = membrane_subtract
+        ctx.membrane_subtract = membrane_subtract * alpha
         ctx.save_for_backward(v_mem, alpha)
         ctx.get_alpha_grads = alpha.requires_grad
 
