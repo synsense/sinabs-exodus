@@ -352,8 +352,7 @@ def exodus_vs_sinabs_compare_grads_single_layer_simplified():
 
     input_data = torch.zeros((batch_size, time_steps, n_channels)).cuda()
     input_data[:, 1] = 2
-    initial_state = torch.rand_ike(input_data[:, 0])
-    # TODO: exodus ignores initial state. include and add unit test
+    initial_state = torch.rand_like(input_data[:, 0])
 
     # Alpha-gradients for each time step
     def get_alpha_grads(model):
