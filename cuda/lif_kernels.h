@@ -25,8 +25,7 @@
  * @param vmemAll 2D-tensor (nNeurons x nTimesteps) to which the computed membrane
  *                potentials are to be written
  * @param input 2D-tensor (nNeurons x nTimesteps) with the input
- * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
- * @param activationsPrev 1D-tensor (nNeurons) with the spikes of the preceding time step
+ * @param vmemPostInitial 1D-tensor (nNeurons) with the initial membrane potentials (after reset)
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
  * @param theta Firing threshold
@@ -40,58 +39,57 @@
 **/
 template <class scalarType>
 __global__ void lifForwardKernel(
-	scalarType* __restrict__ outputSpikes,
-	scalarType* __restrict__ vmemAll,
-	const scalarType* __restrict__ input,
-	const scalarType* __restrict__ vmemInitial,
-	const scalarType* __restrict__ activationsPrev,
+    scalarType* __restrict__ outputSpikes,
+    scalarType* __restrict__ vmemAll,
+    const scalarType* __restrict__ input,
+    const scalarType* __restrict__ vmemPostInitial,
     const scalarType* __restrict__ alpha,
-	const scalarType* __restrict__ membrSubtract,
-	float theta,
-	float thetaLow,
-	bool applyThetaLow,
-	unsigned maxNumSpikes,
-	unsigned nNeurons,
-	unsigned nTimesteps)
+    const scalarType* __restrict__ membrSubtract,
+    float theta,
+    float thetaLow,
+    bool applyThetaLow,
+    unsigned maxNumSpikes,
+    unsigned nNeurons,
+    unsigned nTimesteps)
 {
-	unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if(neuronID >= nNeurons)	return;
-
-	scalarType vmemCurr = vmemInitial[neuronID];
-	unsigned activation = unsigned(activationsPrev[neuronID]);
-
-	for(unsigned t=0; t<nTimesteps; ++t){
-		// Subtract spikes
-		vmemCurr -= activation * membrSubtract[neuronID];
-
-		// Decay state
-		vmemCurr *= alpha[neuronID];
-
-		// ID of neuron and current timestep
-		unsigned linearID = t + neuronID * nTimesteps;
-
-		// Add current input to vmemCurr
-		vmemCurr += input[linearID];
-
-		// Apply lower threshold
-		if (applyThetaLow && (vmemCurr < thetaLow)){
-			vmemCurr = thetaLow;
-		}
-
-		// Generate spikes
-		if(vmemCurr >= theta){
-			activation = min(unsigned(vmemCurr / theta), maxNumSpikes);
-		} else {
-			activation = 0;
-		}
-
-		// Write activation into tensor
-		outputSpikes[linearID] = static_cast<float>(activation);
-
-		// Write current vmemCurr into tensor
-		vmemAll[linearID] = vmemCurr;
-	}
+    unsigned neuronID = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if(neuronID >= nNeurons)	return;
+    
+    scalarType vmemCurr = vmemPostInitial[neuronID];
+    unsigned activation = 0;
+    
+    for(unsigned t=0; t<nTimesteps; ++t){
+    	// Subtract spikes
+    	vmemCurr -= activation * membrSubtract[neuronID];
+    
+    	// Decay state
+    	vmemCurr *= alpha[neuronID];
+    
+    	// ID of neuron and current timestep
+    	unsigned linearID = t + neuronID * nTimesteps;
+    
+    	// Add current input to vmemCurr
+    	vmemCurr += input[linearID];
+    
+    	// Apply lower threshold
+    	if (applyThetaLow && (vmemCurr < thetaLow)){
+    		vmemCurr = thetaLow;
+    	}
+    
+    	// Generate spikes
+    	if(vmemCurr >= theta){
+    		activation = min(unsigned(vmemCurr / theta), maxNumSpikes);
+    	} else {
+    		activation = 0;
+    	}
+    
+    	// Write activation into tensor
+    	outputSpikes[linearID] = static_cast<float>(activation);
+    
+    	// Write current vmemCurr into tensor
+    	vmemAll[linearID] = vmemCurr;
+    }
 
 }
 
@@ -186,8 +184,9 @@ __global__ void lifBackwardKernel(
  * @param alphaGrad 1D-tensor (nNeurons) to which the computed
  *                  alpha gradients are to be written
  * @param outputGrad 2D-tensor (nNeurons x nTimesteps) that holds the given output gradients
- * @param vmem 2D-tensor (nNeurons x nTimesteps) with membrane potentials
  * @param surr 2D-tensor (nNeurons x nTimesteps) with the given surrogate gradients
+ * @param vmemPost 2D-tensor (nNeurons x nTimesteps) with membrane potentials after reset
+ * @param vmemPostInitial 1D-tensor (nNeurons) with initial membrane potentials (after reset)
  *             ds_t/dV_t for each t
  * @param notClipped 2D-tensor (nNeurons x nTimesteps) indicating whether vmem has been clipped
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
@@ -201,7 +200,8 @@ template <class scalarType>
 __global__ void lifBackwardAlphaKernel(
     scalarType* __restrict__ alphaGrad,
     const scalarType* __restrict__ outputGrad,
-    const scalarType* __restrict__ vmem,
+    const scalarType* __restrict__ vmemPost,
+    const scalarType* __restrict__ vmemPostInitial,
     const scalarType* __restrict__ surr,
     const scalarType* __restrict__ notClipped,
     const scalarType* __restrict__ alpha,
@@ -216,13 +216,13 @@ __global__ void lifBackwardAlphaKernel(
     // Index of first element in current row of 2D tensors (i.e. for current neuron)
     unsigned linearRowID = neuronID * nTimesteps;
 
-    // accGrad_{i+1} = (alpha - membrSubtract * surr_{i}) * accGrad_i + vmem_i
-    float accGrad = 0.0f;
+    // accGrad_{i+1} = alpha * (1 - membrSubtract * surr_{i}) * accGrad_i + vmemPost_i
+    float accGrad = vmemPostInitial[neuronID];
 
-    // First summand of input gradient is surrogate gradient * output gradient * notClipped
-    alphaGrad[neuronID] = 0.0f;
+    // Summand of input gradient is accGrad * surrogate gradient * output gradient * notClipped
+    float newGrad = notClipped[linearRowID] * surr[linearRowID] * accGrad;
+    alphaGrad[neuronID] = outputGrad[linearRowID] * newGrad;
 
-    float newGrad;
     unsigned jIndex;
 
     // Iterate through sum, over different derivative enumerators.
@@ -232,9 +232,9 @@ __global__ void lifBackwardAlphaKernel(
         // ID for current surrogate gradient and output gradient
         jIndex = j + linearRowID;
         // Multiply dv_t / dv_{t-1} - term to accumulated gradient
-        accGrad *= alpha[neuronID] - membrSubtract[neuronID] * surr[jIndex - 1];
+        accGrad *= alpha[neuronID] * (1.0 - membrSubtract[neuronID] * surr[jIndex - 1]);
         // Add membane potential
-        accGrad += vmem[jIndex - 1];
+        accGrad += vmemPost[jIndex - 1];
         // Multiply with 0 if clipped
         accGrad *= notClipped[jIndex];
         // New gradient for current time step
@@ -265,8 +265,7 @@ __global__ void lifBackwardAlphaKernel(
  * @param vmem 2D-tensor (nNeurons x nTimesteps) to which the computed membrane potentials
  * 			   are to be written
  * @param input 2D-tensor (nNeurons x nTimesteps) with the input
- * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
- * @param activationsPrev 1D-tensor (nNeurons) with the spikes of the preceding time step
+ * @param vmemPostInitial 1D-tensor (nNeurons) with the initial membrane potentials (after reset)
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
  * @param membrSubtract 1D-tensor of value that is subtracted from the membrane potential
@@ -283,8 +282,7 @@ void lifForwardCuda(
 	scalarType* outputSpikes,
 	scalarType* vmem,
 	const scalarType* input,
-	const scalarType* vmemInitial,
-	const scalarType* activationsPrev,
+	const scalarType* vmemPostInitial,
 	const scalarType* alpha,
 	const scalarType* membrSubtract,
 	const float theta,
@@ -299,13 +297,12 @@ void lifForwardCuda(
 	unsigned block  = ceil(1.0f * nNeurons / thread);
 
 	lifForwardKernel<scalarType><<< block, thread >>>(
-			outputSpikes,
-			vmem,
-			input,
-			vmemInitial,
-			activationsPrev,
+	    outputSpikes,
+	    vmem,
+	    input,
+	    vmemPostInitial,
             alpha,
-			membrSubtract,
+	    membrSubtract,
             theta,
             thetaLow,
             applyThetaLow,
@@ -400,7 +397,8 @@ void lifBackwardCuda(
  * @param alphaGrad 2D-tensor (nNeurons x nTimesteps) to which the computed
  *                  alpha gradients are to be written
  * @param outputGrad 2D-tensor (nNeurons x nTimesteps) that holds the given output gradients
- * @param vmem 2D-tensor (nNeurons x nTimesteps) with membrane potentials
+ * @param vmemPost 2D-tensor (nNeurons x nTimesteps) with membrane potentials after reset
+ * @param vmemPostInitial 1D-tensor (nNeurons) with initial membrane potentials (after reset)
  * @param surr 2D-tensor (nNeurons x nTimesteps) with the given surrogate gradients ds_t/dV_t for each t
  * @param notClipped 2D-tensor (nNeurons x nTimesteps) indicating for each time step whether the
  *                   membrane potential has been clipped to a constant, which will
@@ -416,7 +414,8 @@ template <class scalarType>
 void lifBackwardAlphaCuda(
     scalarType* alphaGrad,
     const scalarType* outputGrad,
-    const scalarType* vmem,
+    const scalarType* vmemPost,
+    const scalarType* vmemPostInitial,
     const scalarType* surr,
     const scalarType* notClipped,
     const scalarType* alpha,
@@ -432,7 +431,8 @@ void lifBackwardAlphaCuda(
     lifBackwardAlphaKernel<scalarType><<< block, thread >>>(
             alphaGrad,
             outputGrad,
-            vmem,
+	    vmemPost,
+            vmemPostInitial,
             surr,
             notClipped,
             alpha,

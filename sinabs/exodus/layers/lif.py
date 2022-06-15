@@ -94,9 +94,6 @@ class LIF(LIFSinabs):
 
         self.decay_early = decay_early
 
-        # Add activations as buffer
-        self.register_buffer("activation", torch.zeros((0)))
-
     def _parse_activation_fn(self, spike_fn, reset_fn):
 
         if spike_fn is None:
@@ -194,17 +191,20 @@ class LIF(LIFSinabs):
             membrane_subtract = self.spike_threshold
         membrane_subtract = torch.full_like(alpha_mem, membrane_subtract)
 
-        return IntegrateAndFire.apply(
+        output_2d, v_mem_2d = IntegrateAndFire.apply(
             i_syn_2d.contiguous(),  # Input data
             alpha_mem,  # Alphas
             self.v_mem.flatten().contiguous(),  # Initial vmem
-            self.activation.flatten(),  # Initial activations
             self.spike_threshold,  # Spike threshold
             membrane_subtract,  # Membrane subtract
             self.min_v_mem,  # Lower bound on vmem
             self.surrogate_grad_fn,  # Surrogate gradient
             self.max_num_spikes_per_bin,  # Max. number of spikes per bin
         )
+        # Apply reset to membrne potential
+        v_mem_2d = v_mem_2d - membrane_subtract.unsqueeze(1) * output_2d
+
+        return output_2d, v_mem_2d
 
     def forward(self, input_data: torch.Tensor):
         """

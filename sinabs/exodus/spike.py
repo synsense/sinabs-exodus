@@ -111,7 +111,6 @@ class IntegrateAndFire(torch.autograd.Function):
         inp: torch.tensor,
         alpha: torch.tensor,
         v_mem_init: torch.tensor,
-        activations: torch.tensor,
         threshold: float,
         membrane_subtract: torch.tensor,
         min_v_mem: float,
@@ -131,7 +130,7 @@ class IntegrateAndFire(torch.autograd.Function):
         alpha : torch.Tensor
             1D shape (N,). State decay factor (exp(-dt/tau)). Set 1 for IAF neurons.
         v_mem_init : torch.Tensor
-            1D shape (N,).  Initial v_mem. Has to be contiguous.
+            1D shape (N,).  Initial v_mem (after reset). Has to be contiguous.
         activations : torch.tensor
             1D, shape (N,). Activations from previous time step.
             Has to be contiguous.
@@ -174,10 +173,6 @@ class IntegrateAndFire(torch.autograd.Function):
             raise ValueError("'v_mem_init' must be 1D, (N,)")
         if not v_mem_init.is_contiguous():
             raise ValueError("'v_mem_init' has to be contiguous.")
-        if not activations.ndim == 1:
-            raise ValueError("'activations' must be 1D, (N,)")
-        if not activations.is_contiguous():
-            raise ValueError("'activations' has to be contiguous.")
 
         if min_v_mem is not None and threshold <= min_v_mem:
             raise ValueError("`threshold` must be greater than `min_v_mem`.")
@@ -192,7 +187,6 @@ class IntegrateAndFire(torch.autograd.Function):
             v_mem,
             inp,
             v_mem_init,
-            activations,
             alpha,
             membrane_subtract,
             threshold,
@@ -204,13 +198,14 @@ class IntegrateAndFire(torch.autograd.Function):
         ctx.threshold = threshold
         ctx.min_v_mem = min_v_mem
         ctx.surrogate_grad_fn = surrogate_grad_fn
-        # Scaling membrane_subtract with alpha compensates for different execution order
-        # in forward pass (i.e. reset happens after spiking and before decay, whereas
-        # backward pass assumes reset to happen after decay)
-        ctx.membrane_subtract = membrane_subtract * alpha
-        ctx.save_for_backward(v_mem, alpha)
+        # vmem is stored before reset (to calculate surrogate gradients in backward)
+        # however, vmem_initial should already have reset applied
+        if alpha.requires_grad:
+            ctx.save_for_backward(output_spikes, v_mem, v_mem_init, alpha, membrane_subtract)
+        else:
+            ctx.save_for_backward(v_mem, alpha, membrane_subtract)
         ctx.get_alpha_grads = alpha.requires_grad
-
+        
         return output_spikes, v_mem
 
     @staticmethod
@@ -220,8 +215,11 @@ class IntegrateAndFire(torch.autograd.Function):
             raise NotImplementedError(
                 "Direct Backpropagation through membrane potential is currently not supported."
             )
-
-        (v_mem, alpha) = ctx.saved_tensors
+        
+        if ctx.get_alpha_grads:
+            (output_spikes, v_mem, v_mem_init, alpha, membrane_subtract) = ctx.saved_tensors
+        else:
+            (v_mem, alpha, membrane_subtract) = ctx.saved_tensors
 
         # Surrogate gradients
         surrogates = ctx.surrogate_grad_fn(v_mem, ctx.threshold)
@@ -233,23 +231,28 @@ class IntegrateAndFire(torch.autograd.Function):
             not_clipped = (v_mem > ctx.min_v_mem).float()
 
         # Gradient wrt. input
+        # Scaling membrane_subtract with alpha compensates for different execution order
+        # in forward pass (i.e. reset happens after spiking and before decay, whereas
+        # backward pass assumes reset to happen after decay)
         grad_input = exodus_cuda.lifBackward(
             surrogates.contiguous(),
             grad_output.contiguous(),
             not_clipped.contiguous(),
             alpha,
-            ctx.membrane_subtract,
+            alpha * membrane_subtract,
         )
 
         # Gradient wrt alpha
         if ctx.get_alpha_grads:
+            v_mem_post = v_mem - membrane_subtract.unsqueeze(1) * output_spikes
             grad_alpha = exodus_cuda.lifBackwardAlpha(
                 surrogates.contiguous(),
                 grad_output.contiguous(),
-                v_mem.contiguous(),
+                v_mem_post.contiguous(),
+                v_mem_init.contiguous(),
                 not_clipped.contiguous(),
                 alpha,
-                ctx.membrane_subtract,
+                membrane_subtract,
             )
         else:
             grad_alpha = None

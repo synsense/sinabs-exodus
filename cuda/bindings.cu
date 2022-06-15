@@ -15,9 +15,8 @@ void lifForward(
 	const torch::Tensor& outputSpikes,
 	const torch::Tensor& vmem,
 	const torch::Tensor& input,
-	const torch::Tensor& vmemInitial,
-	const torch::Tensor& activationsPrev,
-    const torch::Tensor& alpha,
+	const torch::Tensor& vmemPostInitial,
+    	const torch::Tensor& alpha,
 	const torch::Tensor& membrSubtract,
 	const float theta,
 	const float thetaLow,
@@ -27,16 +26,14 @@ void lifForward(
 	CHECK_INPUT(input);
 	CHECK_INPUT(outputSpikes);
 	CHECK_INPUT(vmem);
-	CHECK_INPUT(vmemInitial);
-	CHECK_INPUT(activationsPrev);
+	CHECK_INPUT(vmemPostInitial);
 	CHECK_INPUT(alpha);
 	CHECK_INPUT(membrSubtract);
 
 	// check if tensors are on same device
 	CHECK_DEVICE(input, vmem);
 	CHECK_DEVICE(input, outputSpikes);
-	CHECK_DEVICE(input, vmemInitial);
-	CHECK_DEVICE(input, activationsPrev);
+	CHECK_DEVICE(input, vmemPostInitial);
 	CHECK_DEVICE(input, alpha);
 	CHECK_DEVICE(input, membrSubtract);
 
@@ -58,8 +55,7 @@ void lifForward(
 		outputSpikes.data_ptr<float>(),
 		vmem.data_ptr<float>(),
 		input.data_ptr<float>(),
-		vmemInitial.data_ptr<float>(),
-		activationsPrev.data_ptr<float>(),
+		vmemPostInitial.data_ptr<float>(),
 		alpha.data_ptr<float>(),
 		membrSubtract.data_ptr<float>(),
 		theta, thetaLow, applyThetaLow, maxNumSpikesU, nNeurons, nTimesteps);
@@ -110,21 +106,24 @@ torch::Tensor lifBackward(
 torch::Tensor lifBackwardAlpha(
 	const torch::Tensor& surr,
 	const torch::Tensor& outputGrad,
-	const torch::Tensor& vmem,
+	const torch::Tensor& vmemPost,
+	const torch::Tensor& vmemPostInitial,
 	const torch::Tensor& notClipped,
 	const torch::Tensor& alpha,
 	const torch::Tensor& membrSubtract)
 {
 	CHECK_INPUT(surr);
 	CHECK_INPUT(outputGrad);
-	CHECK_INPUT(vmem);
+	CHECK_INPUT(vmemPost);
+	CHECK_INPUT(vmemPostInitial);
 	CHECK_INPUT(notClipped);
 	CHECK_INPUT(alpha);
 	CHECK_INPUT(membrSubtract);
 
 	// check if tensors are on same device
 	CHECK_DEVICE(surr, outputGrad);
-	CHECK_DEVICE(surr, vmem);
+	CHECK_DEVICE(surr, vmemPost);
+	CHECK_DEVICE(surr, vmemPostInitial);
 	CHECK_DEVICE(surr, notClipped);
 	CHECK_DEVICE(surr, alpha);
 	CHECK_DEVICE(surr, membrSubtract);
@@ -141,7 +140,8 @@ torch::Tensor lifBackwardAlpha(
 	lifBackwardAlphaCuda<float>(
 		alphaGrad.data_ptr<float>(),
 		outputGrad.data_ptr<float>(),
-		vmem.data_ptr<float>(),
+		vmemPost.data_ptr<float>(),
+		vmemPostInitial.data_ptr<float>(),
 		surr.data_ptr<float>(),
 		notClipped.data_ptr<float>(),
 		alpha.data_ptr<float>(),

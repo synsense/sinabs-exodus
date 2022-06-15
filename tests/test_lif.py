@@ -286,6 +286,10 @@ def test_exodus_vs_sinabs_compare_grads_single_layer(train_alphas, norm_input, t
     ).cuda()
 
     input_data = torch.rand((batch_size, time_steps, n_channels)).cuda()
+    # Non-zero initial state
+    initial_state = torch.rand_like(input_data[:, 0])
+    sinabs_model.v_mem = initial_state.clone()
+    exodus_model.v_mem = initial_state.clone()
 
     t_start = time.time()
     sinabs_out = sinabs_model(input_data)
