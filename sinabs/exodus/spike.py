@@ -204,6 +204,9 @@ class IntegrateAndFire(torch.autograd.Function):
         ctx.threshold = threshold
         ctx.min_v_mem = min_v_mem
         ctx.surrogate_grad_fn = surrogate_grad_fn
+        # Scaling membrane_subtract with alpha compensates for different execution order
+        # in forward pass (i.e. reset happens after spiking and before decay, whereas
+        # backward pass assumes reset to happen after decay)
         ctx.membrane_subtract = membrane_subtract * alpha
         ctx.save_for_backward(v_mem, alpha)
         ctx.get_alpha_grads = alpha.requires_grad
