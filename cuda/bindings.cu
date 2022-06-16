@@ -234,7 +234,7 @@ torch::Tensor leakyBackwardAlpha(
 	unsigned nNeurons = outputGrad.size(0);
 
 	// Tensor to store alpha gradient
-	auto alphaGrad = torch::empty_like(alpha);
+	auto alphaGrad = torch::zeros_like(alpha);
 
 	leakyBackwardAlphaCuda<float>(
 		alphaGrad.data_ptr<float>(),

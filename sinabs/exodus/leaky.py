@@ -46,7 +46,6 @@ class LeakyIntegrator(torch.autograd.Function):
 
         out = exodus_cuda.leakyForward(inp, v_mem_init, alpha)
 
-        ctx.alpha = alpha
         ctx.decay_early = decay_early
         ctx.get_alpha_grads = alpha.requires_grad
         if alpha.requires_grad:
@@ -68,6 +67,10 @@ class LeakyIntegrator(torch.autograd.Function):
         if ctx.get_alpha_grads:
             out, alpha = ctx.saved_tensors
             grad_alpha = exodus_cuda.leakyBackwardAlpha(grad_output, out, alpha)
+            print("out:", out)
+            print("do:", grad_output)
+            print("alpha:", alpha)
+            print("da:", grad_alpha)
         else:
             (alpha, ) = ctx.saved_tensors
             grad_alpha = None
@@ -83,5 +86,6 @@ class LeakyIntegrator(torch.autograd.Function):
                 # new gradient is \frac{do'}{d\alpha} = \frac{do}{d\alpha} + o ,
                 # which needs to be multiplied with the output gradients
                 grad_alpha += torch.matmul(out, grad_output.t())
+                print("da new:", grad_alpha)
 
         return grad_input, grad_alpha, None, None

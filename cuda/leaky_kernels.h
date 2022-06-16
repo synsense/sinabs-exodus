@@ -142,11 +142,17 @@ __global__ void leakyBackwardAlphaKernel(
 
 	if(neuronID >= nNeurons)	return;
 
-    // Index of first element in current row of 2D tensors (i.e. for current neuron)
-    unsigned linearRowID = neuronID * nTimesteps;
+	printf("Neuron ID: %u \n", neuronID);
+
+	// Index of first element in current row of 2D tensors (i.e. for current neuron)
+	unsigned linearRowID = neuronID * nTimesteps;
+
+	printf("Linear row ID: %u \n", linearRowID);
 
 	// At t=0, gradient is 0
 	scalarType grad = 0;
+
+	printf("alphaGrad: %f \n", alphaGrad[neuronID]);
 
 	for(unsigned t=1; t<nTimesteps; ++t){
 
@@ -158,6 +164,14 @@ __global__ void leakyBackwardAlphaKernel(
 
 		// Add corresponding element of outputGrad and multiply by alpha
 		alphaGrad[neuronID] += grad * outputGrad[tIndex];
+
+		printf("t: %u \n", t);
+		printf("tIndex: %u \n", tIndex);
+		printf("grad: %f \n", grad);
+		printf("alpha: %f \n", alpha[neuronID]);
+		printf("alphaGrad: %f \n", alphaGrad[neuronID]);
+		printf("output: %f \n", output[tIndex - 1]);
+		printf("outputGrad: %f \n", outputGrad[tIndex]);
 	}
 
 }
