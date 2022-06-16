@@ -58,6 +58,12 @@ class LIF(LIFSinabs):
         When True, normalise input current by tau. This helps when training time constants.
     record_states: bool
         When True, will record all internal states such as v_mem or i_syn in a dictionary attribute `recordings`. Default is False.
+    decay_early: bool
+        When True, exponential decay is applied to synaptic input already in the same
+        time step, i.e. an input pulse of 1 will result in a synaptic current of
+        alpha, rather than one. This only holds for synaptic currents. Membrane
+        potential will be decayed only in next time step, irrespective of how
+        `decay_early` is set. This is the same behavior as in sinabs. Default: True.
     """
 
     def __init__(
@@ -73,7 +79,7 @@ class LIF(LIFSinabs):
         shape: Optional[torch.Size] = None,
         norm_input: bool = True,
         record_states: bool = False,
-        decay_early: bool = False,
+        decay_early: bool = True,
     ):
         # Make sure activation functions match exodus specifications
         self._parse_activation_fn(spike_fn, reset_fn)
@@ -152,14 +158,16 @@ class LIF(LIFSinabs):
     def _forward_synaptic(self, input_2d: torch.Tensor):
         """Evolve synaptic dynamics"""
 
-        alpha_syn = self.alpha_syn_calculated.expand(self.v_mem.shape)
+        alpha_syn = self.alpha_syn_calculated.expand(self.v_mem.shape).flatten()
+
+        if self.decay_early:
+            input_2d = input_2d * alpha_syn.unsqueeze(1)
 
         # Apply exponential filter to input
         return LeakyIntegrator.apply(
-            input_2d,  # Input data
-            alpha_syn.flatten().contiguous(),  # Synaptic alpha
+            input_2d.contiguous(),  # Input data
+            alpha_syn.contiguous(),  # Synaptic alpha
             self.i_syn.flatten().contiguous(),  # Initial synaptic states
-            self.decay_early,  # Early decay of synaptic current            self.train_alphas,  # Should grad for alphas be calculated
         )
 
     def _forward_membrane(self, i_syn_2d: torch.Tensor):
@@ -175,12 +183,15 @@ class LIF(LIFSinabs):
             i_syn_2d = (1.0 - alpha_mem.unsqueeze(1)) * i_syn_2d
 
         if self.spike_fn is None:
+
+            if self.decay_early:
+                i_syn_2d = i_syn_2d * alpha_mem.unsqueeze(1)
+
             # - Non-spiking case (leaky integrator)
             v_mem = LeakyIntegrator.apply(
                 i_syn_2d,  # Input data
                 alpha_mem,  # Membrane alpha
                 self.v_mem.flatten().contiguous(),  # Initial vmem
-                self.decay_early,  # Early decay of membrane potential
             )
 
             return v_mem, v_mem

@@ -248,6 +248,13 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input):
     }
     print(f"Runtime exodus: {time.time() - t_start}")
 
+    if norm_input:
+        atol = 1e-7
+        rtol = 1e-4
+    else:
+        atol = 1e-7
+        rtol = 1e-2
+
     # for (l_sin, l_slyr) in zip(
     #     exodus_model.spiking_layers, sinabs_model.spiking_layers
     # ):
@@ -256,6 +263,11 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input):
     assert (sinabs_out == exodus_out).all()
 
     for k, g_sin in grads_sinabs.items():
+        abs_diff = torch.abs(g_sin - grads_exodus[k])
+        max_diff = torch.max(abs_diff).item()
+        rel_diff = abs_diff / (torch.abs(torch.max(g_sin, grads_exodus[k])) + 1e-12)
+        max_rel_diff = torch.max(rel_diff).item()
+        print(k, "max difference:", max_diff, "max rel. diff.:", max_rel_diff)
         assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=rtol)
 
 
@@ -275,6 +287,7 @@ def test_exodus_vs_sinabs_compare_grads_single_layer(train_alphas, norm_input, t
         min_v_mem=min_v_mem,
         norm_input=norm_input,
         train_alphas=train_alphas,
+        record_states=True
     ).cuda()
     exodus_model = el.LIF(
         tau_mem=torch.ones((n_channels ,)) * tau_mem,
@@ -283,13 +296,18 @@ def test_exodus_vs_sinabs_compare_grads_single_layer(train_alphas, norm_input, t
         min_v_mem=min_v_mem,
         norm_input=norm_input,
         train_alphas=train_alphas,
+        record_states=True
     ).cuda()
 
     input_data = torch.rand((batch_size, time_steps, n_channels)).cuda()
     # Non-zero initial state
-    initial_state = torch.rand_like(input_data[:, 0])
-    sinabs_model.v_mem = initial_state.clone()
-    exodus_model.v_mem = initial_state.clone()
+    initial_state_v_mem = torch.rand_like(input_data[:, 0])
+    sinabs_model.v_mem = initial_state_v_mem.clone()
+    exodus_model.v_mem = initial_state_v_mem.clone()
+    if tau_syn is not None:
+        initial_state_i_syn = torch.rand_like(input_data[:, 0])
+        sinabs_model.i_syn = initial_state_i_syn.clone()
+        exodus_model.i_syn = initial_state_i_syn.clone()
 
     t_start = time.time()
     sinabs_out = sinabs_model(input_data)
@@ -321,7 +339,7 @@ def test_exodus_vs_sinabs_compare_grads_single_layer(train_alphas, norm_input, t
         assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=rtol)
 
 
-def exodus_vs_sinabs_compare_grads_single_layer_simplified():
+def test_exodus_vs_sinabs_compare_grads_single_layer_simplified():
     batch_size, time_steps = 1, 20
     n_channels = 1
     tau_mem = 20.0

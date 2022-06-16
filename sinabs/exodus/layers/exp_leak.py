@@ -29,6 +29,11 @@ class ExpLeak(LIF):
         When True, normalise input current by tau. This helps when training time constants.
     record_states: bool
         When True, will record all internal states such as v_mem or i_syn in a dictionary attribute `recordings`. Default is False.
+    decay_early: bool
+        When True, membrane decay is applied to input already in the same time
+        step, i.e. an input pulse of 1 will result in a membrane potential of
+        alpha, rather than one. `False` results in same behavior as in sinabs.
+        Default: False.
     """
 
     def __init__(

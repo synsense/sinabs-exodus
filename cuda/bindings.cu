@@ -217,14 +217,17 @@ torch::Tensor leakyBackward(
 torch::Tensor leakyBackwardAlpha(
 	const torch::Tensor& outputGrad,
 	const torch::Tensor& output,
+	const torch::Tensor& vmemInitial,
 	const torch::Tensor& alpha)
 {
 	CHECK_INPUT(outputGrad);
 	CHECK_INPUT(output);
+	CHECK_INPUT(vmemInitial);
 	CHECK_INPUT(alpha);
 
 	// check if tensors are on same device
 	CHECK_DEVICE(outputGrad, output);
+	CHECK_DEVICE(outputGrad, vmemInitial);
 	CHECK_DEVICE(outputGrad, alpha);
 
 	// set the current cuda device to wherever the tensor outputGrad resides
@@ -240,6 +243,7 @@ torch::Tensor leakyBackwardAlpha(
 		alphaGrad.data_ptr<float>(),
 		outputGrad.data_ptr<float>(),
 		output.data_ptr<float>(),
+		vmemInitial.data_ptr<float>(),
 		alpha.data_ptr<float>(),
 		nNeurons, nTimesteps);
 

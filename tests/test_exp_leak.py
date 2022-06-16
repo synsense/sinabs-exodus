@@ -24,7 +24,7 @@ def test_leaky_basic_early_decay():
     tau_mem = torch.tensor(30.0)
     input_current = torch.rand(time_steps, 2, 7, 7).cuda()
     layer_dec = el.ExpLeak(tau_mem=tau_mem, decay_early=True).cuda()
-    layer = el.ExpLeak(tau_mem=tau_mem).cuda()
+    layer = el.ExpLeak(tau_mem=tau_mem, decay_early=False).cuda()
     membrane_output = layer(input_current)
     membrane_output_dec = layer_dec(input_current)
 
@@ -56,7 +56,7 @@ def test_leaky_membrane_decay():
     alpha = torch.exp(-1 / tau_mem)
     input_current = torch.zeros(batch_size, time_steps, 2, 7, 7).cuda()
     input_current[:, 0] = 1 / (1 - alpha)  # only inject current in the first time step
-    layer = el.ExpLeak(tau_mem=tau_mem, norm_input=True).cuda()
+    layer = el.ExpLeak(tau_mem=tau_mem, norm_input=True, decay_early=False).cuda()
     membrane_output = layer(input_current)
 
     # first time step is not decayed
@@ -133,7 +133,7 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input):
         assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=rtol)
 
 
-def exodus_vs_sinabs_compare_grads_single_layer_simplified():
+def test_exodus_vs_sinabs_compare_grads_single_layer_simplified():
     batch_size, time_steps = 1, 20
     n_channels = 1
     tau_mem = 20.0

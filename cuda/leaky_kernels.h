@@ -124,6 +124,7 @@ __global__ void leakyBackwardKernel(
  * 		  are to be written
  * @param outputGrad 2D-tensor (nNeurons x nTimesteps) with the output gradients
  * @param output 2D-tensor (nNeurons x nTimesteps) with the output of the forward pass
+ * @param vmemInitial 1D-tensor (nNeurons) with the initial membrane potentials
  * @param alhpa 1D-tensor (nNeurons) with decay factor of the neuron state (exp(-dt/tau)).
  * 		  For IAF neurons set to 1.
  * @param nNeurons Number of neurons/batches
@@ -134,6 +135,7 @@ __global__ void leakyBackwardAlphaKernel(
 	scalarType* __restrict__ alphaGrad,
 	const scalarType* __restrict__ outputGrad,
 	const scalarType* __restrict__ output,
+	const scalarType* __restrict__ vmemInitial,
 	const scalarType* __restrict__ alpha,
 	unsigned nNeurons,
 	unsigned nTimesteps)
@@ -142,17 +144,11 @@ __global__ void leakyBackwardAlphaKernel(
 
 	if(neuronID >= nNeurons)	return;
 
-	printf("Neuron ID: %u \n", neuronID);
-
 	// Index of first element in current row of 2D tensors (i.e. for current neuron)
 	unsigned linearRowID = neuronID * nTimesteps;
 
-	printf("Linear row ID: %u \n", linearRowID);
-
-	// At t=0, gradient is 0
-	scalarType grad = 0;
-
-	printf("alphaGrad: %f \n", alphaGrad[neuronID]);
+	// At t=0, gradient is vmemInitial
+	scalarType grad = vmemInitial[neuronID];
 
 	for(unsigned t=1; t<nTimesteps; ++t){
 
@@ -164,14 +160,6 @@ __global__ void leakyBackwardAlphaKernel(
 
 		// Add corresponding element of outputGrad and multiply by alpha
 		alphaGrad[neuronID] += grad * outputGrad[tIndex];
-
-		printf("t: %u \n", t);
-		printf("tIndex: %u \n", tIndex);
-		printf("grad: %f \n", grad);
-		printf("alpha: %f \n", alpha[neuronID]);
-		printf("alphaGrad: %f \n", alphaGrad[neuronID]);
-		printf("output: %f \n", output[tIndex - 1]);
-		printf("outputGrad: %f \n", outputGrad[tIndex]);
 	}
 
 }
@@ -240,6 +228,7 @@ void leakyBackwardAlphaCuda(
 	scalarType* alphaGrad,
 	const scalarType* outputGrad,
 	const scalarType* output,
+	const scalarType* vmemInitial,
 	const scalarType* alpha,
 	unsigned nNeurons,
 	unsigned nTimesteps)
@@ -252,6 +241,7 @@ void leakyBackwardAlphaCuda(
 			alphaGrad,
 			outputGrad,
 			output,
+			vmemInitial,
 			alpha,
 			nNeurons, nTimesteps);
 }

@@ -45,6 +45,11 @@ class IAF(LIF):
         Optionally initialise the layer state with given shape. If None, will be inferred from input_size.
     record_states: bool
         When True, will record all internal states such as v_mem or i_syn in a dictionary attribute `recordings`. Default is False.
+    decay_early: bool
+        When True, exponential decay is applied to synaptic input already in the same
+        time step, i.e. an input pulse of 1 will result in a synaptic current of
+        alpha, rather than one. This only holds for synaptic currents. This is the
+        same behavior as in sinabs. Default: True.
     """
 
     def __init__(
@@ -57,7 +62,7 @@ class IAF(LIF):
         min_v_mem: Optional[float] = None,
         shape: Optional[torch.Size] = None,
         record_states: bool = False,
-        decay_early: bool = False,
+        decay_early: bool = True,
     ):
         super().__init__(
             tau_mem=np.inf,
