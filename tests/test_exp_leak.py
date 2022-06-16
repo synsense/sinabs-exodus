@@ -131,3 +131,49 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input):
 
     for k, g_sin in grads_sinabs.items():
         assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=rtol)
+
+
+def exodus_vs_sinabs_compare_grads_single_layer_simplified():
+    batch_size, time_steps = 1, 20
+    n_channels = 1
+    tau_mem = 20.0
+    train_alphas = True
+    norm_input = False
+    
+    sinabs_model = sl.ExpLeak(
+        tau_mem=torch.ones((n_channels ,)) * tau_mem,
+        norm_input=norm_input,
+        train_alphas=train_alphas,
+        record_states=True,
+    ).cuda()
+    exodus_model = el.ExpLeak(
+        tau_mem=torch.ones((n_channels ,)) * tau_mem,
+        norm_input=norm_input,
+        train_alphas=train_alphas,
+        record_states=True,
+    ).cuda()
+
+    input_data = torch.zeros((batch_size, time_steps, n_channels)).cuda()
+    input_data[:, 1] = 2
+    # initial_state = torch.rand_like(input_data[:, 0])
+
+    # Alpha-gradients for each time step
+    def get_alpha_grads(model):
+        """ Get alpha gradients at specific time step """
+        model.zero_grad()
+        model.reset_states()
+        # model.v_mem = initial_state.clone()
+        out = model(input_data)
+        grads = []
+        for t in range(input_data.shape[1]):
+            ls = out[0, t, 0]
+            ls.backward(retain_graph=True)
+            grad = model.alpha_mem.grad if train_alphas else model.tau_mem.grad
+            grads.append(grad.item())
+            model.zero_grad()
+        return torch.as_tensor(grads)
+
+    exodus_grads = get_alpha_grads(exodus_model)
+    sinabs_grads = get_alpha_grads(sinabs_model)
+
+    assert torch.allclose(exodus_grads, sinabs_grads, atol=atol, rtol=rtol)

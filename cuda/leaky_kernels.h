@@ -157,7 +157,7 @@ __global__ void leakyBackwardAlphaKernel(
 		grad = alpha[neuronID] * grad + output[tIndex - 1];
 
 		// Add corresponding element of outputGrad and multiply by alpha
-		alphaGrad[neuronID] = grad * outputGrad[tIndex];
+		alphaGrad[neuronID] += grad * outputGrad[tIndex];
 	}
 
 }
