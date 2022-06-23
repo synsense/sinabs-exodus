@@ -57,7 +57,7 @@ class LeakyIntegrator(torch.autograd.Function):
             out, v_mem_init, alpha = ctx.saved_tensors
             grad_alpha = exodus_cuda.leakyBackwardAlpha(grad_output, out, v_mem_init, alpha)
         else:
-            alpha, v_mem_init = ctx.saved_tensors
+            alpha = ctx.saved_tensors
             grad_alpha = None
 
         grad_input = exodus_cuda.leakyBackward(grad_output, alpha)

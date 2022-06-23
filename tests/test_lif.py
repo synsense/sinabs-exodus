@@ -195,9 +195,9 @@ def test_exodus_sinabs_model_equal_output(norm_input):
     assert (spike_output_sinabs == spike_output_exodus).all()
 
 
-args = product((True, False), (True, False))
-@pytest.mark.parametrize("train_alphas,norm_input", args)
-def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input):
+args = product((True, False), (True, False), (True, False))
+@pytest.mark.parametrize("train_alphas,norm_input,train_time_consts", args)
+def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_consts):
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
@@ -219,6 +219,11 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input):
         train_alphas=train_alphas,
         norm_input=norm_input,
     ).cuda()
+
+    if not train_time_consts:
+        for n, p in sinabs_model.named_parameters():
+            if "tau" in n or "alpha" in n:
+                p.requires_grad_(False)
 
     # make sure the weights for linear layers are the same
     for (sinabs_layer, exodus_layer) in zip(
@@ -283,22 +288,22 @@ def test_exodus_vs_sinabs_compare_grads_single_layer(train_alphas, norm_input, t
     min_v_mem = -1
 
     sinabs_model = sl.LIF(
-        tau_mem=torch.ones((n_channels ,)) * tau_mem,
+        tau_mem=torch.ones((n_channels,)) * tau_mem,
         tau_syn=tau_syn,
         spike_threshold=spike_threshold,
         min_v_mem=min_v_mem,
         norm_input=norm_input,
         train_alphas=train_alphas,
-        record_states=True
+        record_states=True,
     ).cuda()
     exodus_model = el.LIF(
-        tau_mem=torch.ones((n_channels ,)) * tau_mem,
+        tau_mem=torch.ones((n_channels,)) * tau_mem,
         tau_syn=tau_syn,
         spike_threshold=spike_threshold,
         min_v_mem=min_v_mem,
         norm_input=norm_input,
         train_alphas=train_alphas,
-        record_states=True
+        record_states=True,
     ).cuda()
 
     input_data = torch.rand((batch_size, time_steps, n_channels)).cuda()
@@ -352,7 +357,7 @@ def test_exodus_vs_sinabs_compare_grads_single_layer_simplified():
     tau_syn = 30
 
     sinabs_model = sl.LIF(
-        tau_mem=torch.ones((n_channels ,)) * tau_mem,
+        tau_mem=torch.ones((n_channels,)) * tau_mem,
         tau_syn=tau_syn,
         spike_threshold=spike_threshold,
         min_v_mem=min_v_mem,
@@ -361,7 +366,7 @@ def test_exodus_vs_sinabs_compare_grads_single_layer_simplified():
         record_states=True,
     ).cuda()
     exodus_model = el.LIF(
-        tau_mem=torch.ones((n_channels ,)) * tau_mem,
+        tau_mem=torch.ones((n_channels,)) * tau_mem,
         tau_syn=tau_syn,
         spike_threshold=spike_threshold,
         min_v_mem=min_v_mem,
@@ -381,7 +386,7 @@ def test_exodus_vs_sinabs_compare_grads_single_layer_simplified():
 
     # Alpha-gradients for each time step
     def get_alpha_grads(model):
-        """ Get alpha gradients at specific time step """
+        """Get alpha gradients at specific time step"""
         model.zero_grad()
         model.reset_states()
         model.v_mem = initial_state_v_mem.clone()
@@ -418,7 +423,7 @@ class SinabsLIFModel(nn.Sequential):
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
             sl.ExpLeak(
-                tau_mem=torch.ones((16, )) * tau_leak,
+                tau_mem=torch.ones((16,)) * tau_leak,
                 norm_input=norm_input,
                 train_alphas=train_alphas,
             ),
@@ -431,7 +436,7 @@ class SinabsLIFModel(nn.Sequential):
             ),
             nn.Linear(16, 32, bias=False),
             sl.ExpLeak(
-                tau_mem=torch.ones((32, )) * tau_leak,
+                tau_mem=torch.ones((32,)) * tau_leak,
                 norm_input=norm_input,
                 train_alphas=train_alphas,
             ),
@@ -444,7 +449,7 @@ class SinabsLIFModel(nn.Sequential):
             ),
             nn.Linear(32, n_output_classes, bias=False),
             sl.ExpLeak(
-                tau_mem=torch.ones((n_output_classes, )) * tau_leak,
+                tau_mem=torch.ones((n_output_classes,)) * tau_leak,
                 norm_input=norm_input,
                 train_alphas=train_alphas,
             ),
@@ -489,7 +494,7 @@ class ExodusLIFModel(nn.Sequential):
         super().__init__(
             nn.Linear(n_input_channels, 16, bias=False),
             el.ExpLeak(
-                tau_mem=torch.ones((16, )) * tau_leak,
+                tau_mem=torch.ones((16,)) * tau_leak,
                 norm_input=norm_input,
                 train_alphas=train_alphas,
             ),
@@ -502,7 +507,7 @@ class ExodusLIFModel(nn.Sequential):
             ),
             nn.Linear(16, 32, bias=False),
             el.ExpLeak(
-                tau_mem=torch.ones((32, )) * tau_leak,
+                tau_mem=torch.ones((32,)) * tau_leak,
                 norm_input=norm_input,
                 train_alphas=train_alphas,
             ),
@@ -515,7 +520,7 @@ class ExodusLIFModel(nn.Sequential):
             ),
             nn.Linear(32, n_output_classes, bias=False),
             el.ExpLeak(
-                tau_mem=torch.ones((n_output_classes, )) * tau_leak,
+                tau_mem=torch.ones((n_output_classes,)) * tau_leak,
                 norm_input=norm_input,
                 train_alphas=train_alphas,
             ),
