@@ -204,7 +204,7 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
     tau_leak = 10.0
 
     model_kwargs = dict(
-        tau_mem,
+        tau_mem=tau_mem,
         tau_leak=tau_leak,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
@@ -280,11 +280,11 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
     new_exodus_model(input_data)  # Enforce state initialization
     new_exodus_model.load_state_dict(sinabs_model.state_dict())
     # - Evolve all four models
-    sianbs_out = sinabs_model(input_data)
+    sinabs_out = sinabs_model(input_data)
     exodus_out = exodus_model(input_data)
-    new_sianbs_out = new_sinabs_model(input_data)
+    new_sinabs_out = new_sinabs_model(input_data)
     new_exodus_out = new_exodus_model(input_data)
-    for out in (exodus_out, new_sianbs_out, new_exodus_out):
+    for out in (exodus_out, new_sinabs_out, new_exodus_out):
         assert (out == sinabs_out).all()
 
 
