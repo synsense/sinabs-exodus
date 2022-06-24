@@ -203,22 +203,16 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
     tau_mem = 20.0
     tau_leak = 10.0
 
-    sinabs_model = SinabsLIFModel(
+    model_kwargs = dict(
         tau_mem,
         tau_leak=tau_leak,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         train_alphas=train_alphas,
         norm_input=norm_input,
-    ).cuda()
-    exodus_model = ExodusLIFModel(
-        tau_mem,
-        tau_leak=tau_leak,
-        n_input_channels=n_input_channels,
-        n_output_classes=n_output_classes,
-        train_alphas=train_alphas,
-        norm_input=norm_input,
-    ).cuda()
+    )
+    sinabs_model = SinabsLIFModel(**model_kwargs).cuda()
+    exodus_model = ExodusLIFModel(**model_kwargs).cuda()
 
     if not train_time_consts:
         for n, p in sinabs_model.named_parameters():
@@ -262,10 +256,10 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
         atol = 1e-7
         rtol = 1e-2
 
-    # for (l_sin, l_slyr) in zip(
-    #     exodus_model.spiking_layers, sinabs_model.spiking_layers
-    # ):
-    #     assert torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
+    for (l_sin, l_slyr) in zip(
+        exodus_model.spiking_layers, sinabs_model.spiking_layers
+    ):
+        assert torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
 
     assert (sinabs_out == exodus_out).all()
 
@@ -276,6 +270,22 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
         max_rel_diff = torch.max(rel_diff).item()
         print(k, "max difference:", max_diff, "max rel. diff.:", max_rel_diff)
         assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=rtol)
+
+    # - Export parameters from exodus to sinabs
+    new_sinabs_model = SinabsLIFModel(**model_kwargs).cuda()
+    new_sinabs_model(input_data)  # Enforce state initialization
+    new_sinabs_model.load_state_dict(exodus_model.state_dict())
+    # - Export parameters from sinabs to exodus
+    new_exodus_model = ExodusLIFModel(**model_kwargs).cuda()
+    new_exodus_model(input_data)  # Enforce state initialization
+    new_exodus_model.load_state_dict(sinabs_model.state_dict())
+    # - Evolve all four models
+    sianbs_out = sinabs_model(input_data)
+    exodus_out = exodus_model(input_data)
+    new_sianbs_out = new_sinabs_model(input_data)
+    new_exodus_out = new_exodus_model(input_data)
+    for out in (exodus_out, new_sianbs_out, new_exodus_out):
+        assert (out == sinabs_out).all()
 
 
 args = product((True, False), (True, False), (None, 30))
