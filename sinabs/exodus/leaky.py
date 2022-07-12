@@ -7,7 +7,7 @@ class LeakyIntegrator(torch.autograd.Function):
     def forward(
         ctx,
         inp: torch.tensor,
-        alpha: torh.tensor,
+        alpha: torch.tensor,
         v_mem_init: torch.tensor,
         decay_early: bool = False,
         get_alpha_grads: bool = False,
