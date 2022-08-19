@@ -67,8 +67,6 @@ from sinabs.exodus.layers import IAF
 iaf = IAF()
 ```
 
-Note that the `tau_syn` parameter for adding synaptic dynamics to `IAF` and `LIF` layers is currently not supported. However, you can include an additional `ExpLeak` layer in your model for the same functionality.
-
 ## License
 
 Sinabs-exodus is published under AGPL v3.0. See the LICENSE file for details.
