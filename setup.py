@@ -1,6 +1,7 @@
 from setuptools import setup
 from torch.utils import cpp_extension
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+import versioneer
 
 import os
 
@@ -16,6 +17,7 @@ else:
 
 setup(
     name='exodus',
+    version=versioneer.get_version(),
     packages=['sinabs.exodus', 'sinabs.exodus.layers'],
     ext_modules=[
         CUDAExtension(
@@ -32,7 +34,7 @@ setup(
             ],
         )
     ],
-    cmdclass={'build_ext': BuildExtension},
+    cmdclass=versioneer.get_cmdclass(cmdclass={'build_ext': BuildExtension}),
     install_requires=["sinabs"],
     version=__version__,
 )
