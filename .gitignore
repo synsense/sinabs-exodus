@@ -14,3 +14,4 @@ sinabs/network.py
 sinabs/onnx/
 sinabs/synopcounter.py
 sinabs/utils.py
+sinabs_exodus.egg-info

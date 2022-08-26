@@ -1,11 +1,9 @@
 from setuptools import setup
 from torch.utils import cpp_extension
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+import versioneer
 
 import os
-
-with open("sinabs/exodus/version.py") as version_info:
-    exec(version_info.read())
 
 if cpp_extension.check_compiler_abi_compatibility("g++"):
     os.environ["CC"] = "g++"
@@ -14,8 +12,12 @@ else:
     os.environ["CC"] = "c++"
     os.environ["CXX"] = "c++"
 
+cmdclass = versioneer.get_cmdclass()
+cmdclass.update({"build_ext": BuildExtension.with_options(no_python_abi_suffix=True)})
+
 setup(
     name='exodus',
+    version=versioneer.get_version(),
     packages=['sinabs.exodus', 'sinabs.exodus.layers'],
     ext_modules=[
         CUDAExtension(
@@ -32,8 +34,7 @@ setup(
             ],
         )
     ],
-    cmdclass={'build_ext': BuildExtension},
+    cmdclass=cmdclass,
     install_requires=["sinabs"],
-    version=__version__,
 )
 
