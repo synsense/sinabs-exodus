@@ -67,6 +67,24 @@ from sinabs.exodus.layers import IAF
 iaf = IAF()
 ```
 
+## Frequent Issues
+
+### CUDA is not installed or version does not match that of torch
+
+If during installation you get an error, such as
+```
+RuntimeError:
+The detected CUDA version (...) mismatches the version that was used to compile
+PyTorch (...). Please make sure to use the same CUDA versions.
+```
+or
+```
+OSError: CUDA_HOME environment variable is not set. Please set it to your CUDA install root.
+```
+CUDA is either not installed properly on your system or the version does not match that of torch (see [above](#setup_cuda)).
+If you do have the correct version installed and the error still comes up, try to make sure that the environment variables such as `PATH` and `LD_LIBRARY_PATH` contain references to the correct directories. Please refer to the NVIDIA's installation instructions for more details on how to do this for your system.
+
+
 ## License
 
 Sinabs-exodus is published under AGPL v3.0. See the LICENSE file for details.
