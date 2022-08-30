@@ -5,12 +5,22 @@ import versioneer
 
 import os
 
-if cpp_extension.check_compiler_abi_compatibility("g++"):
-    os.environ["CC"] = "g++"
-    os.environ["CXX"] = "g++"
+if hasattr(cpp_extension, "get_compiler_abi_compatibility_and_version"):
+    # - New function since torch 1.12
+    if cpp_extension.get_compiler_abi_compatibility_and_version("g++")[0]:
+        os.environ["CC"] = "g++"
+        os.environ["CXX"] = "g++"
+    else:
+        os.environ["CC"] = "c++"
+        os.environ["CXX"] = "c++"
 else:
-    os.environ["CC"] = "c++"
-    os.environ["CXX"] = "c++"
+    # - This works up to torch 1.11
+    if cpp_extension.check_compiler_abi_compatibility("g++"):
+        os.environ["CC"] = "g++"
+        os.environ["CXX"] = "g++"
+    else:
+        os.environ["CC"] = "c++"
+        os.environ["CXX"] = "c++"
 
 # Class for clean command
 class Cleaner(Command):
