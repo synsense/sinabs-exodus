@@ -9,7 +9,7 @@ Some of the code in this library is loosely based upon [slayerPytorch](https://g
 ## Getting started
 
 ### Prerequisites
-
+<a name="prerequisites"></a>
 EXODUS uses CUDA for efficient computation, so you will need a CUDA-capable GPU, and a working installation of [CUDA](https://docs.nvidia.com/cuda/index.html).
 
 If you have CUDA installed, you can use the command
@@ -81,8 +81,8 @@ or
 ```
 OSError: CUDA_HOME environment variable is not set. Please set it to your CUDA install root.
 ```
-CUDA is either not installed properly on your system or the version does not match that of torch (see [above](#setup_cuda)).
-If you do have the correct version installed and the error still comes up, try to make sure that the environment variables such as `PATH` and `LD_LIBRARY_PATH` contain references to the correct directories. Please refer to the NVIDIA's installation instructions for more details on how to do this for your system.
+CUDA is either not installed properly on your system or the version does not match that of torch (see [above](#prerequisites)).
+If you do have the correct version installed and the error still comes up, try to make sure that the environment variables such as `PATH` and `LD_LIBRARY_PATH` contain references to the correct directories. Please refer to NVIDIA's installation instructions for more details on how to do this for your system.
 
 
 ## License
