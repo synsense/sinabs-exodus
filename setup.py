@@ -44,7 +44,7 @@ version_major = version.split(".")[0]
 
 # Install
 setup(
-    name='exodus',
+    name='sinabs-exodus',
     version=version,
     packages=['sinabs.exodus', 'sinabs.exodus.layers'],
     ext_modules=[
