@@ -2,9 +2,19 @@
 
 Sinabs-exodus is a plugin to the [sinabs](https://sinabs.ai) spiking neural network library. It can provide massive speedups in training and inference on GPU.
 
-The tool is based on EXODUS[^1], a formulation of backpropagation-through-time with surrogate gradients, that allows for efficient parallelization. EXODUS stands for _**EX**act calculation **O**f **D**erivatives as **U**pdate to **S**LAYER_. It builds upon the SLAYER[^2] algorithm, but uses mathematically accurate gradients and tends to be more robust to surrogate gradient scaling, making training less prone to suffer from exploding or vanishin gradients.
+The tool is based on [EXODUS](https://arxiv.org/abs/2205.10242), a formulation of backpropagation-through-time with surrogate gradients, that allows for efficient parallelization. EXODUS stands for _**EX**act calculation **O**f **D**erivatives as **U**pdate to **S**LAYER_. It builds upon the SLAYER[^1] algorithm, but uses mathematically accurate gradients and tends to be more robust to surrogate gradient scaling, making training less prone to suffer from exploding or vanishin gradients.
 
 Some of the code in this library is loosely based upon [slayerPytorch](https://github.com/bamsumit/slayerPytorch), the python implementation of SLAYER.
+
+If you use any of this code please cite the following publication:
+```
+@article{bauer2022exodus,
+  title={EXODUS: Stable and Efficient Training of Spiking Neural Networks},
+  author={Bauer, Felix Christian and Lenz, Gregor and Haghighatshoar, Saeid and Sheik, Sadique},
+  journal={arXiv preprint arXiv:2205.10242},
+  year={2022}
+}
+```
 
 ## Getting started
 
@@ -90,9 +100,6 @@ If you do have the correct version installed and the error still comes up, try t
 Sinabs-exodus is published under AGPL v3.0. See the LICENSE file for details.
 
 ## Footnotes
-[^1]: tba
-
-
-[^2]: Sumit Bam Shrestha and Garrick Orchard. "SLAYER: Spike Layer Error Reassignment in Time." 
+[^1]: Sumit Bam Shrestha and Garrick Orchard. "SLAYER: Spike Layer Error Reassignment in Time." 
 In _Advances in Neural Information Processing Systems_, pp. 1417-1426. 2018.
 
