@@ -77,8 +77,8 @@ class IAF(LIF):
             record_states=record_states,
             decay_early=decay_early,
         )
-        # deactivate tau_mem being learned
-        self.tau_mem.requires_grad = False
+        # IAF does not have time constants
+        self.tau_mem = None
 
     @property
     def alpha_mem_calculated(self):
