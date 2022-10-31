@@ -120,6 +120,7 @@ def test_sinabs_model():
         backend="sinabs",
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        batch_size=batch_size,
     ).cuda()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
     spike_output = model(input_data)
@@ -136,6 +137,7 @@ def test_exodus_model():
         backend="exodus",
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        batch_size=batch_size,
     ).cuda()
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
     spike_output = model(input_data)
@@ -152,11 +154,13 @@ def test_exodus_sinabs_model_equal_output():
         backend="sinabs",
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        batch_size=batch_size,
     ).cuda()
     exodus_model = SNN(
         backend="exodus",
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
+        batch_size=batch_size,
     ).cuda()
     # make sure the weights for linear layers are the same
     for (sinabs_layer, exodus_layer) in zip(
@@ -259,6 +263,7 @@ class SNN(nn.Module):
     def __init__(
         self,
         backend,
+        batch_size,
         n_input_channels=16,
         n_output_classes=10,
         threshold=1.0,
@@ -269,7 +274,7 @@ class SNN(nn.Module):
             n_input_channels=n_input_channels, n_output_classes=n_output_classes
         )
         self.network = from_model(
-            ann, backend=backend, spike_threshold=threshold, min_v_mem=min_v_mem
+            ann, backend=backend, spike_threshold=threshold, min_v_mem=min_v_mem, batch_size=batch_size
         ).spiking_model
 
     def reset_states(self):
