@@ -4,13 +4,14 @@ import torch
 import sinabs
 
 module_map = {
-    sl.IAF : el.IAF,
+    sl.IAF: el.IAF,
     sl.IAFSqueeze: el.IAFSqueeze,
     sl.LIF: el.LIF,
     sl.LIFSqueeze: el.LIFSqueeze,
     sl.ExpLeak: el.ExpLeak,
     sl.ExpLeakSqueeze: el.ExpLeakSqueeze,
 }
+
 
 def exodus_to_sinabs(model: torch.nn.Module):
     """
@@ -20,12 +21,20 @@ def exodus_to_sinabs(model: torch.nn.Module):
     All layer attributes will be copied over.
 
     Parameters:
-        model: The model that contains EXODUS layers. 
+        model: The model that contains EXODUS layers.
     """
 
-    mapping_list = [(exodus_class, lambda module, replacement=sinabs_class: replacement(**module._param_dict)) for sinabs_class, exodus_class in module_map.items()]
+    mapping_list = [
+        (
+            exodus_class,
+            lambda module, replacement=sinabs_class: replacement(**module._param_dict),
+        )
+        for sinabs_class, exodus_class in module_map.items()
+    ]
     for class_to_replace, mapper_fn in mapping_list:
-        model = sinabs.conversion.replace_module(model, class_to_replace, mapper_fn=mapper_fn)
+        model = sinabs.conversion.replace_module(
+            model, class_to_replace, mapper_fn=mapper_fn
+        )
     return model
 
 
@@ -36,10 +45,18 @@ def sinabs_to_exodus(model: torch.nn.Module):
     All layer attributes will be copied over.
 
     Parameters:
-        model: The model that contains Sinabs layers. 
+        model: The model that contains Sinabs layers.
     """
 
-    mapping_list = [(sinabs_class, lambda module, replacement=exodus_class: replacement(**module._param_dict)) for sinabs_class, exodus_class in module_map.items()]
+    mapping_list = [
+        (
+            sinabs_class,
+            lambda module, replacement=exodus_class: replacement(**module._param_dict),
+        )
+        for sinabs_class, exodus_class in module_map.items()
+    ]
     for class_to_replace, mapper_fn in mapping_list:
-        model = sinabs.conversion.replace_module(model, class_to_replace, mapper_fn=mapper_fn)
+        model = sinabs.conversion.replace_module(
+            model, class_to_replace, mapper_fn=mapper_fn
+        )
     return model

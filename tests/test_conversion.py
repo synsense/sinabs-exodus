@@ -3,15 +3,6 @@ import sinabs.layers as sl
 import torch.nn as nn
 from sinabs.exodus import conversion
 
-module_map = {
-    sl.IAF : el.IAF,
-    sl.IAFSqueeze: el.IAFSqueeze,
-    sl.LIF: el.LIF,
-    sl.LIFSqueeze: el.LIFSqueeze,
-    sl.ExpLeak: el.ExpLeak,
-    sl.ExpLeakSqueeze: el.ExpLeakSqueeze,
-}
-
 
 def test_sinabs_to_exodus_layer_replacement():
     batch_size = 12
@@ -24,7 +15,6 @@ def test_sinabs_to_exodus_layer_replacement():
         sl.SumPool2d(2, 2),
         nn.Flatten(),
         nn.Linear(64, 10),
-
     )
 
     exodus_model = conversion.sinabs_to_exodus(sinabs_model)
