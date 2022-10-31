@@ -17,6 +17,7 @@ def test_leaky_basic():
     assert input_current.shape == membrane_output.shape
     assert torch.isnan(membrane_output).sum() == 0
     assert membrane_output.sum() > 0
+    assert "EXODUS" in layer.__repr__()
 
 
 def test_leaky_basic_early_decay():

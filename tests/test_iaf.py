@@ -21,6 +21,7 @@ def test_iaf_basic():
     assert input_current.shape == spike_output.shape
     assert torch.isnan(spike_output).sum() == 0
     assert spike_output.sum() > 0
+    assert "EXODUS" in layer.__repr__()
 
 
 def test_iaf_squeeze():
