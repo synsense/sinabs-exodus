@@ -266,6 +266,8 @@ class LIF(LIFSinabs):
 
         return output_full
 
+    def __repr__(self):
+        return "EXODUS " + super().__repr__()
 
 class LIFSqueeze(LIF, SqueezeMixin):
     """
