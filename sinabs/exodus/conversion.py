@@ -27,7 +27,7 @@ def exodus_to_sinabs(model: torch.nn.Module):
     mapping_list = [
         (
             exodus_class,
-            lambda module, replacement=sinabs_class: replacement(**module._param_dict),
+            lambda module, replacement=sinabs_class: replacement(**module.arg_dict),
         )
         for sinabs_class, exodus_class in module_map.items()
     ]
@@ -51,7 +51,7 @@ def sinabs_to_exodus(model: torch.nn.Module):
     mapping_list = [
         (
             sinabs_class,
-            lambda module, replacement=exodus_class: replacement(**module._param_dict),
+            lambda module, replacement=exodus_class: replacement(**module.arg_dict),
         )
         for sinabs_class, exodus_class in module_map.items()
     ]
