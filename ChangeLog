@@ -1,0 +1,15 @@
+CHANGES
+=======
+
+v1.1.0
+------
+
+* Prepend string representation of EXODUS objects with 'EXODUS'
+* In IAF layers `tau_mem` now evaluates to `None` (formerly inf)
+* Convenience functions `exodus_to_sinabs` and `sinabs_to_exodus` for
+converting between Sinabs/EXODUS backends
+* Dependency on Sinabs v1.1.1
+
+v1.0.1
+------
+* Update README
