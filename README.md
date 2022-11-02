@@ -76,6 +76,26 @@ from sinabs.exodus.layers import IAF
 
 iaf = IAF()
 ```
+### Conversion to and from Sinabs classes
+
+EXODUS provides convenience functions for converting EXODUS objects to their counterparts in Sinabs and vice versa in the `sinabs.exodus.conversion` module. In the following example, a new object `exodus_model` is created that is the same as `sinabs_model`, but with all sinabs-based layers being replaced with EXODUS equivalents, where possible. The original `sinabs_model` can be any `torch.nn.Module` object. Currently, classes that can be converted to and from EXODUS are: `IAF`, `IAFSqueeze`, `LIF`, `LIFSqueeze`, `ExpLeak`, and `ExpLeakSqueeze`.
+
+```
+from torch.nn import Sequential, Conv2d, AvgPool2d
+from sinabs.layers import IAF
+from sinabs.exodus import conversion
+
+# This could be any torch module
+sinabs_model = Sequential(Conv2d(3, 4, 1), AvgPool2d(2), IAF())
+
+# Convert sinabs layers to exodus layers
+exodus_model = conversion.sinabs_to_exodus(sinabs_model)
+```
+
+Converting from EXODUS to Sinabs:
+```
+new_sinabs_model = conversion.exodus_to_sinabs(exodus_model)
+```
 
 ## Frequent Issues
 
@@ -93,6 +113,12 @@ OSError: CUDA_HOME environment variable is not set. Please set it to your CUDA i
 ```
 CUDA is either not installed properly on your system or the version does not match that of torch (see [above](#prerequisites)).
 If you do have the correct version installed and the error still comes up, try to make sure that the environment variables such as `PATH` and `LD_LIBRARY_PATH` contain references to the correct directories. Please refer to NVIDIA's installation instructions for more details on how to do this for your system.
+
+The same holds if, while using EXODUS, you get an error like:
+```
+ undefined symbol: _ZN2at4_ops5zeros4callEN3c108ArrayRefIlEENS2
+ ```
+or similar. 
 
 
 ## License
