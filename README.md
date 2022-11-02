@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/494380296.svg)](https://zenodo.org/badge/latestdoi/494380296)
+
 # sinabs-exodus
 
 Sinabs-exodus is a plugin to the [sinabs](https://sinabs.ai) spiking neural network library. It can provide massive speedups in training and inference on GPU.
