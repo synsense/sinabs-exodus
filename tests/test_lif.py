@@ -249,6 +249,7 @@ def test_exodus_sinabs_state_transfer(train_alphas, norm_input, train_time_const
 args = product((True, False), (True, False), (True, False))
 @pytest.mark.parametrize("train_alphas,norm_input,train_time_consts", args)
 def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_consts):
+    n_epochs = 3
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     tau_mem = 20.0
@@ -277,12 +278,13 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
         sinabs_layer.load_state_dict(exodus_layer.state_dict())
     assert (sinabs_model[0].weight == exodus_model[0].weight).all()
 
-    input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda()
+    input_data = torch.rand((n_epochs, batch_size, time_steps, n_input_channels)).cuda()
     if not norm_input:
         input_data *= 5e-2
 
     t_start = time.time()
-    sinabs_out = sinabs_model(input_data)
+    for inp_epoch in input_data:
+        sinabs_out = sinabs_model(inp_epoch)
     loss_sinabs = torch.nn.functional.mse_loss(sinabs_out, torch.ones_like(sinabs_out))
     loss_sinabs.backward()
     grads_sinabs = {
@@ -292,7 +294,8 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
 
     exodus_model.zero_grad()
     t_start = time.time()
-    exodus_out = exodus_model(input_data)
+    for inp_epoch in input_data:
+        exodus_out = exodus_model(inp_epoch)
     loss_exodus = torch.nn.functional.mse_loss(exodus_out, torch.ones_like(exodus_out))
     loss_exodus.backward()
     grads_exodus = {

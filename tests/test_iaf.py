@@ -148,6 +148,7 @@ def test_exodus_model():
 
 
 def test_exodus_sinabs_model_equal_output():
+    n_epochs = 3
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     sinabs_model = SNN(
@@ -170,16 +171,20 @@ def test_exodus_sinabs_model_equal_output():
     assert (
         sinabs_model.linear_layers[0].weight == exodus_model.linear_layers[0].weight
     ).all()
-    input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda() * 1e5
-    spike_output_sinabs = sinabs_model(input_data)
-    spike_output_exodus = exodus_model(input_data)
+    input_data = torch.rand((n_epochs, batch_size, time_steps, n_input_channels)).cuda() * 1e5
 
-    assert spike_output_sinabs.shape == spike_output_exodus.shape
-    assert spike_output_sinabs.sum() == spike_output_exodus.sum()
-    assert (spike_output_sinabs == spike_output_exodus).all()
+    # Iterate over a few epochs to make sure states are propagated correctly
+    for inp_epoch in input_data:
+        spike_output_sinabs = sinabs_model(inp_epoch)
+        spike_output_exodus = exodus_model(inp_epoch)
+
+        assert spike_output_sinabs.shape == spike_output_exodus.shape
+        assert spike_output_sinabs.sum() == spike_output_exodus.sum()
+        assert (spike_output_sinabs == spike_output_exodus).all()
 
 
 def test_exodus_vs_sinabs_compare_grads():
+    n_epochs = 3
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     sinabs_model = SinabsIAFModel(
@@ -200,10 +205,12 @@ def test_exodus_vs_sinabs_compare_grads():
         sinabs_model.linear_layers[0].weight == exodus_model.linear_layers[0].weight
     ).all()
 
-    input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda()
+    # Iterate over a few epochs to make sure states and gradients are propagated correctly
+    input_data = torch.rand((n_epochs, batch_size, time_steps, n_input_channels)).cuda()
 
     t_start = time.time()
-    sinabs_out = sinabs_model(input_data)
+    for inp_epoch in input_data:
+        sinabs_out = sinabs_model(inp_epoch)
     loss_sinabs = torch.nn.functional.mse_loss(sinabs_out, torch.ones_like(sinabs_out))
     loss_sinabs.backward()
     grads_sinabs = [
@@ -212,7 +219,8 @@ def test_exodus_vs_sinabs_compare_grads():
     print(f"Runtime sinabs: {time.time() - t_start}")
 
     t_start = time.time()
-    exodus_out = exodus_model(input_data)
+    for inp_epoch in input_data:
+        exodus_out = exodus_model(inp_epoch)
     loss_exodus = torch.nn.functional.mse_loss(exodus_out, torch.ones_like(exodus_out))
     loss_exodus.backward()
     grads_exodus = [
@@ -220,23 +228,14 @@ def test_exodus_vs_sinabs_compare_grads():
     ]
     print(f"Runtime exodus: {time.time() - t_start}")
 
-    # for (l_sin, l_slyr) in zip(
-    #     sinabs_model.spiking_layers, exodus_model.spiking_layers
-    # ):
-    #     assert torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
 
-    # Because of different update mechanisms for v_mem, compare only for last layer
-    # and for neurons that did not spike in the las time step
-    assert torch.logical_or(
-        torch.isclose(
-            exodus_model.spiking_layers[-1].v_mem,
-            sinabs_model.spiking_layers[-1].v_mem,
-            atol=atol,
-            rtol=rtol,
-        ),
-        sinabs_out[:, -1] >= 1.0
-    ).all()
+    # - Compare neuron states
+    for (l_sin, l_slyr) in zip(
+        sinabs_model.spiking_layers, exodus_model.spiking_layers
+    ):
+        assert torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
 
+    # - Compare outputs
     assert (sinabs_out == exodus_out).all()
 
     for g0, g1 in zip(grads_sinabs, grads_exodus):
