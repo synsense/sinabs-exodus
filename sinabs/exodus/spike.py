@@ -238,8 +238,8 @@ class IntegrateAndFire(torch.autograd.Function):
             surrogates.contiguous(),
             grad_output.contiguous(),
             not_clipped.contiguous(),
-            alpha,
-            alpha * membrane_subtract,
+            alpha.contiguous(),
+            alpha * membrane_subtract.contiguous(),
         )
 
         # Gradient wrt alpha
@@ -251,8 +251,8 @@ class IntegrateAndFire(torch.autograd.Function):
                 v_mem_post.contiguous(),
                 v_mem_init.contiguous(),
                 not_clipped.contiguous(),
-                alpha,
-                membrane_subtract,
+                alpha.contiguous(),
+                membrane_subtract.contiguous(),
             )
         else:
             grad_alpha = None
