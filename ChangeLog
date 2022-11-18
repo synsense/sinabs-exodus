@@ -3,6 +3,11 @@ CHANGES
 
 * Update README
 
+v1.1.1
+------
+* Make sure discontinuous gradients are handled properly during backward
+calls.
+
 v1.1.0
 ------
 
