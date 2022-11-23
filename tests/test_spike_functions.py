@@ -68,11 +68,11 @@ def test_compare_integratefire_backward(backward_var):
     # Copy data without connecting gradients
     input_exodus = input_sinabs.clone().detach().requires_grad_(True)
     v_mem_init_exodus = v_mem_init_sinabs.clone().detach().requires_grad_(True)
-    alpha_sinabs.clone().detach().requires_grad_(True)
+    alpha_exodus = alpha_sinabs.clone().detach().requires_grad_(True)
 
     out_exodus, vmem_exodus = evolve_exodus(
         inp=input_exodus,
-        alhpa=alpha_exodus,
+        alpha=alpha_exodus,
         v_mem_init=v_mem_init_exodus,
         threshold=thr,
         min_v_mem=min_v_mem,
@@ -82,7 +82,7 @@ def test_compare_integratefire_backward(backward_var):
 
     out_sinabs, vmem_sinabs = evolve_sinabs(
         inp=input_sinabs,
-        alhpa=alpha_sinabs,
+        alpha=alpha_sinabs,
         v_mem_init=v_mem_init_sinabs,
         threshold=thr,
         min_v_mem=min_v_mem,
@@ -124,21 +124,22 @@ def evolve_exodus(
     v_mem_init: torch.tensor,
     threshold: float,
     min_v_mem: float,
-    surrogate_grad_fn: Callable,
-    max_num_spikes_per_bin: Optional[int] = None,
+    surrogate_grad_fn,
+    max_num_spikes_per_bin = None,
 ):
+    membrane_subtract = torch.ones_like(v_mem_init) * threshold
     output_spikes, v_mem = IntegrateAndFire.apply(
         inp,
         alpha,
         v_mem_init,
         threshold,
-        torch.ones_like(v_mem_init_exodus) * thr,  # membrane subtract
+        membrane_subtract,
         min_v_mem,
         surrogate_grad_fn,
         max_num_spikes_per_bin,
     )
 
-    v_mem = v_mem - membrane_subtract.unsqueeze(1) * output_spikes
+    v_mem = v_mem - membrane_subtract.unsqueeze(0) * output_spikes
 
     return output_spikes, v_mem
 
@@ -148,8 +149,8 @@ def evolve_sinabs(
     v_mem_init: torch.tensor,
     threshold: float,
     min_v_mem: float,
-    surrogate_grad_fn: Callable,
-    max_num_spikes_per_bin: Optional[int] = None,
+    surrogate_grad_fn, 
+    max_num_spikes_per_bin = None,
 ):
     if max_num_spikes_per_bin is not None:
         spike_fn = sa.MaxSpike(max_num_spikes_per_bin)
@@ -157,13 +158,13 @@ def evolve_sinabs(
         spike_fn = sa.MultiSpike
 
     output_spikes, state, record_dict = lif_forward(
-        input_data=inp,
+        input_data=inp.unsqueeze(0), # Add batch dimension
         alpha_mem=alpha,
         alpha_syn=None,
         state={"v_mem": v_mem_init},
         spike_threshold=threshold,
         spike_fn=spike_fn,
-        reset_fn=sa.MembraneSubtract,
+        reset_fn=sa.MembraneSubtract(),
         surrogate_grad_fn=surrogate_grad_fn,
         min_v_mem=min_v_mem,
         norm_input=False,
