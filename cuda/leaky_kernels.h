@@ -115,8 +115,8 @@ __global__ void leakyBackwardKernel(
  *
  * The gradients are given by
  * \frac{d Out_t}{d \alpha} = \sum_{i=0}^{t-1} (t-i) \alpha^{t-i-1} In_i ,
- * which can be calculated recursively as
- * \frac{d Out_0}{d \alpha} = 0
+ * where In_0 is vmemInitial. The gradients can be calculated recursively as
+ * \frac{d Out_1}{d \alpha} = vmemInitial
  * \frac{d Out_{t}}{d \alpha} = \alpha * frac{d Out_{t-1}{d \alpha} + Out_{t-1}
  * because Out_{t} = \sum_{i=0}^{T} \alpha^{t-i} * In_i
  *
@@ -149,6 +149,7 @@ __global__ void leakyBackwardAlphaKernel(
 
 	// At t=0, gradient is vmemInitial
 	scalarType grad = vmemInitial[neuronID];
+	alphaGrad[neuronID] = grad * outputGrad[linearRowID];
 
 	for(unsigned t=1; t<nTimesteps; ++t){
 
