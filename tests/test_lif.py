@@ -249,9 +249,9 @@ def test_exodus_sinabs_state_transfer(train_alphas, norm_input, train_time_const
 args = product((True, False), (True, False), (True, False))
 @pytest.mark.parametrize("train_alphas,norm_input,train_time_consts", args)
 def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_consts):
-    n_epochs = 1
-    batch_size, time_steps = 10, 100
-    n_input_channels, n_output_classes = 16, 10
+    n_epochs = 2
+    batch_size, time_steps = 2, 5
+    n_input_channels, n_output_classes = 2, 2
     tau_mem = 20.0
     tau_leak = 10.0
 
@@ -325,6 +325,10 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
         print(k, "max difference:", max_diff, "max rel. diff.:", max_rel_diff)
         assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=rtol)
 
+        corr, scale = correlation_and_scale(g_sin, grads_exodus[k])
+        # Gradients must differ by less than 8 degree in direction and 5 per cent in length
+        assert (1 - corr) < 1e-2, f"Correlation is {corr}"
+        assert torch.abs(scale - 1) < 5e-2, f"Relative scale is {scale}"
 
     # - Export parameters from exodus to sinabs
     new_sinabs_model = SinabsLIFModel(**model_kwargs).cuda()
@@ -409,6 +413,9 @@ def test_exodus_vs_sinabs_compare_grads_single_layer(train_alphas, norm_input, t
         print(k, "max difference:", max_diff)
 
         assert torch.allclose(g_sin, grads_exodus[k], atol=atol, rtol=5e-2)
+        corr, scale = correlation_and_scale(g_sin, grads_exodus[k])
+        assert torch.abs(corr - 1) < 1e-5, f"Correlation is {corr}"
+        assert torch.abs(scale - 1) < 2e-2, f"Relative scale is {scale}"
 
 
 def test_exodus_vs_sinabs_compare_grads_single_layer_simplified():
@@ -493,7 +500,7 @@ class SinabsLIFModel(nn.Sequential):
                 train_alphas=train_alphas,
             ),
             sl.LIF(
-                tau_mem=torch.ones((n_input_channels,)) * tau_mem,
+                tau_mem=torch.ones((16,)) * tau_mem,
                 spike_threshold=threshold,
                 min_v_mem=min_v_mem,
                 norm_input=norm_input,
@@ -564,7 +571,7 @@ class ExodusLIFModel(nn.Sequential):
                 train_alphas=train_alphas,
             ),
             el.LIF(
-                tau_mem=torch.ones((n_input_channels,)) * tau_mem,
+                tau_mem=torch.ones((16,)) * tau_mem,
                 spike_threshold=threshold,
                 min_v_mem=min_v_mem,
                 norm_input=norm_input,
@@ -613,3 +620,14 @@ class ExodusLIFModel(nn.Sequential):
     @property
     def linear_layers(self):
         return [self[0], self[3], self[6]]
+
+def correlation_and_scale(a, b):
+    sum_of_sqrs_a = (a**2).sum()
+    sum_of_sqrs_b = (b**2).sum()
+    if sum_of_sqrs_a == 0 and sum_of_sqrs_b == 0:
+        return torch.tensor(1), torch.tensor(1)  # both a and b are 0
+
+    corr = (a * b).sum() / (torch.sqrt(sum_of_sqrs_a) * torch.sqrt(sum_of_sqrs_b))
+    scale = sum_of_sqrs_a / sum_of_sqrs_b
+
+    return corr, scale
