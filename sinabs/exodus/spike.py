@@ -211,10 +211,10 @@ class IntegrateAndFire(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output, grad_v_mem):
 
-        if torch.nonzero(grad_v_mem).any():
-            raise NotImplementedError(
-                "Direct Backpropagation through membrane potential is currently not supported."
-            )
+        # if (grad_v_mem != 0).any():
+        #     raise NotImplementedError(
+        #         "Direct Backpropagation through membrane potential is currently not supported."
+        #     )
         
         if ctx.get_alpha_grads:
             (output_spikes, v_mem, v_mem_init, alpha, membrane_subtract) = ctx.saved_tensors
@@ -234,9 +234,10 @@ class IntegrateAndFire(torch.autograd.Function):
         # Scaling membrane_subtract with alpha compensates for different execution order
         # in forward pass (i.e. reset happens after spiking and before decay, whereas
         # backward pass assumes reset to happen after decay)
+        surrogates = surrogates.contiguous()
         grad_input = exodus_cuda.lifBackward(
-            surrogates.contiguous(),
-            grad_output.contiguous(),
+            surrogates,
+            surrogates * grad_output.contiguous() + grad_v_mem.contiguous(),
             not_clipped.contiguous(),
             alpha.contiguous(),
             alpha * membrane_subtract.contiguous(),
@@ -246,8 +247,8 @@ class IntegrateAndFire(torch.autograd.Function):
         if ctx.get_alpha_grads:
             v_mem_post = v_mem - membrane_subtract.unsqueeze(1) * output_spikes
             grad_alpha = exodus_cuda.lifBackwardAlpha(
-                surrogates.contiguous(),
-                grad_output.contiguous(),
+                surrogates,
+                surrogates * grad_output.contiguous() + grad_v_mem.contiguous(),
                 v_mem_post.contiguous(),
                 v_mem_init.contiguous(),
                 not_clipped.contiguous(),
@@ -257,4 +258,8 @@ class IntegrateAndFire(torch.autograd.Function):
         else:
             grad_alpha = None
 
-        return (grad_input, grad_alpha, None, None, None, None, None, None, None)
+        # Backpropagate one more decay step from first time point.
+        # Works because d v_1 / d inp_1 = 1 and reset on v_mem_ini is done externally.
+        grad_init = alpha * grad_input[:, 0]
+
+        return (grad_input, grad_alpha, grad_init, None, None, None, None, None, None)

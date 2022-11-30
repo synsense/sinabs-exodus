@@ -148,7 +148,7 @@ __global__ void lifBackwardKernel(
     float accGrad = notClipped[iIndex];
 
     // First summand of input gradient is surrogate gradient * output gradient * notClipped
-    inputGrad[iIndex] = surr[iIndex] * outputGrad[iIndex] * accGrad;
+    inputGrad[iIndex] = outputGrad[iIndex] * accGrad;
 
     float newFactor;
     unsigned jIndex;
@@ -163,7 +163,7 @@ __global__ void lifBackwardKernel(
         newFactor = alpha[neuronID] - membrSubtract[neuronID] * surr[jIndex - 1];
         accGrad *= (newFactor * notClipped[jIndex]);
         // Add new term to current gradient
-        inputGrad[iIndex] += accGrad * surr[jIndex] * outputGrad[jIndex];
+        inputGrad[iIndex] += accGrad * outputGrad[jIndex];
     }
 
 }
@@ -220,7 +220,7 @@ __global__ void lifBackwardAlphaKernel(
     float accGrad = vmemPostInitial[neuronID];
 
     // Summand of input gradient is accGrad * surrogate gradient * output gradient * notClipped
-    float newGrad = notClipped[linearRowID] * surr[linearRowID] * accGrad;
+    float newGrad = notClipped[linearRowID] * accGrad;
     alphaGrad[neuronID] = outputGrad[linearRowID] * newGrad;
 
     unsigned jIndex;
@@ -237,10 +237,11 @@ __global__ void lifBackwardAlphaKernel(
         accGrad += vmemPost[jIndex - 1];
         // Multiply with 0 if clipped
         accGrad *= notClipped[jIndex];
-        // New gradient for current time step
-        newGrad = accGrad * surr[jIndex];
-        // Add new term to current gradient scalar product
-        alphaGrad[neuronID] += newGrad * outputGrad[jIndex];
+        // // New gradient for current time step
+        // newGrad = accGrad * surr[jIndex];
+        
+	// Add new term to current gradient scalar product
+        alphaGrad[neuronID] += accGrad * outputGrad[jIndex];
     }
 
 }
