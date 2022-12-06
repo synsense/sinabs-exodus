@@ -1,7 +1,13 @@
 CHANGES
 =======
 
+v1.1.2
+------
 * Update README
+* Enable backpropagation through v_mem and gradients wrt. v_mem_init for
+Integrate-and-Fire and Leaky layers. This also makes sure that gradients are
+correct when backpropagating through multiple forward calls.
+* Bugfix in gradient of Leaky layer wrt to alpha when v_mem_init is not 0.
 
 v1.1.1
 ------
