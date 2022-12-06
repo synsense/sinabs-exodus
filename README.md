@@ -17,6 +17,19 @@ If you use any of this code please cite the following publication:
   year={2022}
 }
 ```
+Additionally, you also may cite the current version of the code directly as
+```
+@software{felix_bauer_2022_7274227,
+  author       = {Bauer, Felix Christian and Lenz, Gregor and Weidel Philipp, and Küpelioğlu, Nogay and Sheik, Sadique},
+  title        = {{synsense/sinabs-exodus: Backpropagation through full layer history}},
+  month        = dec,
+  year         = 2022,
+  publisher    = {Zenodo},
+  version      = {v1.1.2},
+  doi          = {10.5281/zenodo.7403526},
+  url          = {https://doi.org/10.5281/zenodo.7403526}
+}
+```
 
 ## Getting started
 
