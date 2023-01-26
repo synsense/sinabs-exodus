@@ -1,0 +1,58 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: sinabs-exodus
+message: >-
+  A plugin to the sinabs spiking neural network library to
+  provide massive speedups in training and inference on GPU.
+type: software
+authors:
+  - given-names: Felix Christian
+    family-names: Bauer
+    email: felix.bauer@synsense.ai
+    affiliation: SynSense
+    orcid: 'https://orcid.org/0000-0002-1631-7403'
+  - given-names: Gregor
+    family-names: Lenz
+    email: gregor.lenz@synsense.ai
+    affiliation: SynSense
+  - family-names: Küpelioğlu
+    given-names: Nogay
+    email: nogay.kupelioglu@synsense.ai
+    affiliation: SynSense
+  - given-names: Philipp
+    family-names: Weidel
+  - given-names: Sadique
+    family-names: Sheik
+    email: sadique.sheik@synsense.ai
+    affiliation: SynSense
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.7403526
+    description: DOI of version 1.1.2
+repository-code: 'https://github.com/synsense/sinabs-exodus'
+abstract: >-
+  Sinabs-exodus is a plugin to the sinabs spiking neural
+  network library. It can provide massive speedups in
+  training and inference on GPU.
+
+
+  The tool is based on EXODUS, a formulation of
+  backpropagation-through-time with surrogate gradients,
+  that allows for efficient parallelization. EXODUS stands
+  for EXact calculation Of Derivatives as Update to SLAYER.
+  It builds upon the SLAYER algorithm, but uses
+  mathematically accurate gradients and tends to be more
+  robust to surrogate gradient scaling, making training less
+  prone to suffer from exploding or vanishing gradients.
+keywords:
+  - spiking Neural Networks
+  - GPU accelerated
+  - Bapckpropagation Through Time
+  - Neuromorphic Engineering
+  - Computational Efficiency
+license: AGPL-3.0
+commit: a31aca0efa3882421a6765d5bf36b6a41da2a4e0
+version: v1.1.2
+date-released: '2022-12-06'
