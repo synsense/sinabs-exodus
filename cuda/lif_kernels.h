@@ -28,10 +28,10 @@
  * @param vmemPostInitial 1D-tensor (nNeurons) with the initial membrane potentials (after reset)
  * @param alhpa 1D-tensor with decay factor of the neuron states (exp(-dt/tau)).
  *              For IAF neurons set to 1.
- * @param theta Firing threshold
+ * @param theta 1D-tensor of firing thresholds
  * @param membrSubtract 1D tensor with values that are subtracted from the membrane
  *        potential when spiking
- * @param thetaLow Lower bound to vmem
+ * @param thetaLow 1D-tensor of lower bounds to vmem
  * @param applyThetaLow Flag whether vmem is lower bounded
  * @param maxNumSpikes Maximum number of spikes a neuron can emit per time step
  * @param nNeurons Number of neurons/batches
@@ -45,8 +45,8 @@ __global__ void lifForwardKernel(
     const scalarType* __restrict__ vmemPostInitial,
     const scalarType* __restrict__ alpha,
     const scalarType* __restrict__ membrSubtract,
-    float theta,
-    float thetaLow,
+    const scalarType* __restrict__ theta,
+    const scalarType* __restrict__ thetaLow,
     bool applyThetaLow,
     unsigned maxNumSpikes,
     unsigned nNeurons,
@@ -73,13 +73,13 @@ __global__ void lifForwardKernel(
     	vmemCurr += input[linearID];
     
     	// Apply lower threshold
-    	if (applyThetaLow && (vmemCurr < thetaLow)){
-    		vmemCurr = thetaLow;
+    	if (applyThetaLow && (vmemCurr < thetaLow[neuronID])){
+    		vmemCurr = thetaLow[neuronID];
     	}
     
     	// Generate spikes
-    	if(vmemCurr >= theta){
-    		activation = min(unsigned(vmemCurr / theta), maxNumSpikes);
+    	if(vmemCurr >= theta[neuronID]){
+    		activation = min(unsigned(vmemCurr / theta[neuronID]), maxNumSpikes);
     	} else {
     		activation = 0;
     	}
@@ -271,8 +271,8 @@ __global__ void lifBackwardAlphaKernel(
  *              For IAF neurons set to 1.
  * @param membrSubtract 1D-tensor of value that is subtracted from the membrane potential
  *        when spiking
- * @param theta Firing threshold
- * @param thetaLow Lower bound to vmem
+ * @param theta 1D-tensor of firing thresholds
+ * @param thetaLow 1D-tensor of lower bounds to vmem
  * @param applyThetaLow Flag whether vmem is lower bounded
  * @param multipleSpikes Flag whether multiple spikes can be emitted in a single time step
  * @param nNeurons Number of neurons/batches
@@ -286,8 +286,8 @@ void lifForwardCuda(
 	const scalarType* vmemPostInitial,
 	const scalarType* alpha,
 	const scalarType* membrSubtract,
-	const float theta,
-	const float thetaLow,
+	const scalarType* theta,
+	const scalarType* thetaLow,
 	const bool applyThetaLow,
 	const unsigned maxNumSpikes,
 	const unsigned nNeurons,
@@ -302,14 +302,14 @@ void lifForwardCuda(
 	    vmem,
 	    input,
 	    vmemPostInitial,
-            alpha,
-	    membrSubtract,
-            theta,
-            thetaLow,
-            applyThetaLow,
-            maxNumSpikes,
-            nNeurons,
-            nTimesteps);
+        alpha,
+        membrSubtract,
+        theta,
+        thetaLow,
+        applyThetaLow,
+        maxNumSpikes,
+        nNeurons,
+        nTimesteps);
 }
 
 

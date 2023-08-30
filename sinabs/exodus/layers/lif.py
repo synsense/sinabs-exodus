@@ -16,6 +16,32 @@ from sinabs.exodus.spike import IntegrateAndFire
 
 __all__ = ["LIF", "LIFSqueeze"]
 
+def expand_to_1d_contiguous(
+    value: Union[float, torch.Tensor], shape: Tuple[int]
+) -> torch.Tensor:
+    """
+    Expand tensor to tensor of given shape.
+    Then flatten and make contiguous.
+
+    Not flattening immediately ensures that non-scalar tensors are
+    broadcast correctly to the required shape.
+
+    Parameters
+    ----------
+    value: float or torch
+        Tensor to be expanded
+    shape: tuple of ints
+        shape to expand to
+
+    Returns
+    -------
+    torch.Tensor
+        Contiguous 1D-tensor from expanded `value`
+    """
+
+    expanded_tensor = torch.astensor(value).expand(shape)
+    return expanded_tensor.flatten().contiguous()
+
 
 class LIF(LIFSinabs):
     """
@@ -70,11 +96,11 @@ class LIF(LIFSinabs):
         self,
         tau_mem: Union[float, torch.Tensor],
         tau_syn: Optional[Union[float, torch.Tensor]] = None,
-        spike_threshold: float = 1.0,
+        spike_threshold: Optional[Union[float, torch.Tensor]] = 1.0,
         spike_fn: Callable = MultiSpike,
         reset_fn: Callable = MembraneSubtract(),
         surrogate_grad_fn: Callable = SingleExponential(),
-        min_v_mem: Optional[float] = None,
+        min_v_mem: Optional[Union[float, torch.Tensor]] = None,
         train_alphas: bool = False,
         shape: Optional[torch.Size] = None,
         norm_input: bool = True,
@@ -158,7 +184,9 @@ class LIF(LIFSinabs):
     def _forward_synaptic(self, input_2d: torch.Tensor):
         """Evolve synaptic dynamics"""
 
-        alpha_syn = self.alpha_syn_calculated.expand(self.v_mem.shape).flatten()
+        alpha_syn = expand_to_1d_contiguous(
+            self.alpha_syn_calculated, self.v_mem.shape
+        )
 
         if self.decay_early:
             input_2d = input_2d * alpha_syn.unsqueeze(1)
@@ -166,7 +194,7 @@ class LIF(LIFSinabs):
         # Apply exponential filter to input
         return LeakyIntegrator.apply(
             input_2d.contiguous(),  # Input data
-            alpha_syn.contiguous(),  # Synaptic alpha
+            alpha_syn,  # Synaptic alpha
             self.i_syn.flatten().contiguous(),  # Initial synaptic states
         )
 
@@ -174,8 +202,9 @@ class LIF(LIFSinabs):
         """Evolve membrane dynamics"""
 
         # Broadcast alpha to number of neurons (x batches)
-        alpha_mem = self.alpha_mem_calculated.expand(self.v_mem.shape)
-        alpha_mem = alpha_mem.flatten().contiguous()
+        alpha_mem = expand_to_1d_contiguous(
+            self.alpha_mem_calculated, self.v_mem.shape
+        )
 
         if self.norm_input:
             # Rescale input with 1 - alpha (based on approximation that
@@ -196,19 +225,32 @@ class LIF(LIFSinabs):
 
             return v_mem, v_mem
 
+        # Expand spike threshold
+        spike_threshold = expand_to_1d_contiguous(
+            self.spike_threshold, self.v_mem.shape
+        )
+
+        # Expand min_v_mem
+        min_v_mem = expand_to_1d_contiguous(
+            self.min_v_mem, self.v_mem.shape
+        )
+
         # Expand membrane subtract
         membrane_subtract = self.reset_fn.subtract_value
         if membrane_subtract is None:
-            membrane_subtract = self.spike_threshold
-        membrane_subtract = torch.full_like(alpha_mem, membrane_subtract)
+            membrane_subtract = spike_threshold
+        else:
+            membrane_subtract = expand_to_1d_contiguous(
+                membrane_subtract, self.v_mem.shape
+            )
 
         output_2d, v_mem_2d = IntegrateAndFire.apply(
             i_syn_2d.contiguous(),  # Input data
             alpha_mem,  # Alphas
             self.v_mem.flatten().contiguous(),  # Initial vmem
-            self.spike_threshold,  # Spike threshold
+            spike_threshold,  # Spike threshold
             membrane_subtract,  # Membrane subtract
-            self.min_v_mem,  # Lower bound on vmem
+            min_v_mem,  # Lower bound on vmem
             self.surrogate_grad_fn,  # Surrogate gradient
             self.max_num_spikes_per_bin,  # Max. number of spikes per bin
         )
@@ -268,6 +310,8 @@ class LIF(LIFSinabs):
 
     def __repr__(self):
         return "EXODUS " + super().__repr__()
+
+    def 
 
 class LIFSqueeze(LIF, SqueezeMixin):
     """
