@@ -1,4 +1,4 @@
-from typing import Callable, Optional, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 from sinabs.layers import SqueezeMixin
@@ -310,8 +310,6 @@ class LIF(LIFSinabs):
 
     def __repr__(self):
         return "EXODUS " + super().__repr__()
-
-    def 
 
 class LIFSqueeze(LIF, SqueezeMixin):
     """
