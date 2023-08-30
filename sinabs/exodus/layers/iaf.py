@@ -54,12 +54,12 @@ class IAF(LIF):
 
     def __init__(
         self,
-        spike_threshold: float = 1.0,
+        spike_threshold: Optional[Union[float, torch.Tensor]] = 1.0,
         spike_fn: Callable = MultiSpike,
         reset_fn: Callable = MembraneSubtract(),
         surrogate_grad_fn: Callable = SingleExponential(),
-        tau_syn: Optional[float] = None,
-        min_v_mem: Optional[float] = None,
+        tau_syn: Optional[Union[float, torch.Tensor]] = None,
+        min_v_mem: Optional[Union[float, torch.Tensor]] = None,
         shape: Optional[torch.Size] = None,
         record_states: bool = False,
         decay_early: bool = True,
