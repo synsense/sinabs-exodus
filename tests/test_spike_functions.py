@@ -1,83 +1,91 @@
 import pytest
+from itertools import product
 import torch
 from sinabs.exodus.spike import IntegrateAndFire
 from sinabs import activation as sa
 from sinabs.layers.functional.lif import lif_forward
 
 
-def test_integratefire():
+v_mem_initials = (torch.zeros(2).cuda(), torch.rand(2).cuda() - 0.5)
+alphas = (torch.ones(2).cuda() * 0.9, torch.rand(2).cuda())
+thresholds = (torch.ones(2).cuda(), torch.tensor([0.3, 0.9]))
+min_v_mem = (None, -torch.ones(2).cuda(), torch.tensor([-0.3, 0.4]).cuda())
+membrane_subtract = (None, torch.tensor([0.1, 0.2]).cuda())
+
+argvals = (v_mem_initials, alphas, thresholds, min_v_mem, membrane_subtract)
+combined_args = product(*argvals)
+argnames = "v_mem_initial,alpha,threshold,min_v_mem,membrane_subtract"
+
+@pytest.mark.parametrize(argnames, combined_args)
+def test_integratefire(
+    v_mem_initial, alpha, threshold, min_v_mem, membrane_subtract
+):
     inp = torch.rand((2, 10), requires_grad=True, device="cuda")
-    v_mem_initial = torch.zeros(2, device="cuda")
     surrogate_gradient_fn = sa.Heaviside(0)
 
-    thr = 1.0
-    alpha = torch.as_tensor(0.9).expand(v_mem_initial.shape).contiguous().cuda()
-    membrane_subtract = torch.as_tensor(thr).expand(v_mem_initial.shape)
+    if membrane_subtract is None:
+        membrane_subtract = threshold
 
-    out, v_mem = IntegrateAndFire.apply(
-        inp,
-        alpha,
-        v_mem_initial,
-        thr,
-        membrane_subtract.contiguous().float().cuda(),
-        -thr,
-        surrogate_gradient_fn,
-    )
+    def apply():
+        return IntegrateAndFire.apply(
+            inp,
+            alpha,
+            v_mem_initial,
+            threshold,
+            membrane_subtract,
+            min_v_mem,
+            surrogate_gradient_fn,
+        )
 
-    out.sum().backward()
+    if (membrane_subtract >= threshold).any():
+        with pytest.raises(ValueError):
+            apply()
+    else:
+        # Test forward pass and backpropagation through output
+        out, v_mem = apply()
+        out.sum().backward()
+
+        # Make sure backprop through vmem raises error
+        out, v_mem = apply()
+        with pytest.raises(NotImplementedError):
+            # Gradients for membrane potential are not implemented
+            v_mem.sum().backward()
 
 
-def test_integratefire_backprop_vmem():
-    inp = torch.rand((2, 10), requires_grad=True, device="cuda")
-    v_mem_initial = torch.zeros(2, device="cuda")
-    surrogate_gradient_fn = sa.Heaviside(0)
+backward_varnames = ("spikes", "vmem", "sum")
+argvals_ext = (*argvals, backward_varnames)
+combined_args_ext = product(*argvals_ext)
+@pytest.mark.parametrize(argnames + ",backward_var", combined_args_ext)
+def test_compare_integratefire_backward(
+    v_mem_initial, alpha, threshold, min_v_mem, membrane_subtract
+):
 
-    thr = 1
-    alpha = torch.as_tensor(0.9).expand(v_mem_initial.shape).contiguous().cuda()
-    membrane_subtract = torch.as_tensor(thr).expand(v_mem_initial.shape)
-
-    out, v_mem = IntegrateAndFire.apply(
-        inp,
-        alpha,
-        v_mem_initial,
-        thr,
-        membrane_subtract.contiguous().float().cuda(),
-        -thr,
-        surrogate_gradient_fn,
-    )
-
-    with pytest.raises(NotImplementedError):
-        # Gradients for membrane potential are not implemented
-        v_mem.sum().backward()
-
-args = ("spikes", "vmem", "sum")
-@pytest.mark.parametrize("backward_var", args)
-def test_compare_integratefire_backward(backward_var):
+    torch.manual_seed(1)
+    
     time_steps = 100
-    n_neurons = 8
-    thr = 1
-    min_v_mem = -1
+    n_neurons = 2
     surrogate_gradient_fn = sa.Heaviside(0)
     max_num_spikes_per_bin = 2
     
     # Input data and initialization 
     input_sinabs = torch.rand((time_steps, n_neurons), requires_grad=True, device= "cuda")
-    v_mem_init_sinabs = torch.rand(n_neurons, requires_grad=True, device= "cuda")
-    alpha_sinabs = torch.rand(n_neurons, requires_grad=True, device= "cuda")
+    v_mem_init_sinabs = v_mem_initial.clone().requires_grad_(True)
+    alpha_sinabs = alpha.clone().requires_grad_(True)
 
     # Copy data without connecting gradients
     input_exodus = input_sinabs.clone().detach().requires_grad_(True)
-    v_mem_init_exodus = v_mem_init_sinabs.clone().detach().requires_grad_(True)
-    alpha_exodus = alpha_sinabs.clone().detach().requires_grad_(True)
+    v_mem_init_exodus = v_mem_initial.clone().requires_grad_(True)
+    alpha_exodus = alpha.clone().requires_grad_(True)
 
     out_exodus, vmem_exodus = evolve_exodus(
         inp=input_exodus,
         alpha=alpha_exodus,
         v_mem_init=v_mem_init_exodus,
-        threshold=thr,
+        threshold=threshold,
         min_v_mem=min_v_mem,
         surrogate_grad_fn=surrogate_gradient_fn,
         max_num_spikes_per_bin=max_num_spikes_per_bin,
+        membrane_subtract=membrane_subtract,
     )
 
     out_sinabs, vmem_sinabs = evolve_sinabs(
@@ -88,6 +96,7 @@ def test_compare_integratefire_backward(backward_var):
         min_v_mem=min_v_mem,
         surrogate_grad_fn=surrogate_gradient_fn,
         max_num_spikes_per_bin=max_num_spikes_per_bin,
+        membrane_subtract=membrane_subtract,
     )
 
     assert torch.allclose(out_exodus, out_sinabs)
@@ -122,12 +131,15 @@ def evolve_exodus(
     inp: torch.tensor,
     alpha: torch.tensor,
     v_mem_init: torch.tensor,
-    threshold: float,
-    min_v_mem: float,
+    threshold: torch.tensor,
+    min_v_mem: torch.tensor,
     surrogate_grad_fn,
     max_num_spikes_per_bin = None,
+    membrane_subtract = None,
 ):
-    membrane_subtract = torch.ones_like(v_mem_init) * threshold
+    if membrane_subtract is None:
+        membrane_subtract = torch.ones_like(v_mem_init) * threshold
+
     output_spikes, v_mem = IntegrateAndFire.apply(
         inp,
         alpha,
@@ -147,10 +159,11 @@ def evolve_sinabs(
     inp: torch.tensor,
     alpha: torch.tensor,
     v_mem_init: torch.tensor,
-    threshold: float,
-    min_v_mem: float,
+    threshold: torch.tensor,
+    min_v_mem: torch.tensor,
     surrogate_grad_fn, 
     max_num_spikes_per_bin = None,
+    membrane_subtract = None,
 ):
     if max_num_spikes_per_bin is not None:
         spike_fn = sa.MaxSpike(max_num_spikes_per_bin)
@@ -164,7 +177,7 @@ def evolve_sinabs(
         state={"v_mem": v_mem_init},
         spike_threshold=threshold,
         spike_fn=spike_fn,
-        reset_fn=sa.MembraneSubtract(),
+        reset_fn=sa.MembraneSubtract(subtract_value=membrane_subtract),
         surrogate_grad_fn=surrogate_grad_fn,
         min_v_mem=min_v_mem,
         norm_input=False,
