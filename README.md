@@ -47,7 +47,14 @@ The part after the `+` in the output is the CUDA version that PyTorch has been i
 
 ### Installation
 
-After cloning this repository, the package can simply be installed via pip.
+**Installation from PyPI**
+The easiest way to install sinabs-exodus is via pip, from the Python Package Index (PyPI):
+```
+$pip install sinabs-exodus
+```
+
+**Installation from source**
+You can also clone this repository and install from there, for instance if you want to use a specific branch. After cloning, the package can simply be installed via pip.
 This is a `namespace package` meaning that once installed this will be sharing its namespace with `sinabs` package.
 
 ```
