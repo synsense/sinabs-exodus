@@ -39,8 +39,8 @@ def expand_to_1d_contiguous(
         Contiguous 1D-tensor from expanded `value`
     """
 
-    expanded_tensor = torch.astensor(value).expand(shape)
-    return expanded_tensor.flatten().contiguous()
+    expanded_tensor = torch.as_tensor(value).expand(shape)
+    return expanded_tensor.float().flatten().contiguous()
 
 
 class LIF(LIFSinabs):
@@ -231,9 +231,12 @@ class LIF(LIFSinabs):
         )
 
         # Expand min_v_mem
-        min_v_mem = expand_to_1d_contiguous(
-            self.min_v_mem, self.v_mem.shape
-        )
+        if self.min_v_mem is None:
+            min_v_mem = None
+        else:
+            min_v_mem = expand_to_1d_contiguous(
+                self.min_v_mem, self.v_mem.shape
+            )
 
         # Expand membrane subtract
         membrane_subtract = self.reset_fn.subtract_value
