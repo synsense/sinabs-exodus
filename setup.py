@@ -63,6 +63,6 @@ setup(
         )
     ],
     cmdclass=cmdclass,
-    install_requires=["torch", f"sinabs == {version_major}.*, >= 1.1.1"],
+    install_requires=["torch", f"sinabs == {version_major}.*, >= 1.2.9"],
 )
 
