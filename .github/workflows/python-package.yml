@@ -12,7 +12,7 @@ on:
 
 jobs:
   container-test-job:
-    runs-on: [self-hosted, linux]
+    runs-on: ubuntu-latest
     container:
       image: docker.io/library/exodus:known_good
       options: --gpus all
