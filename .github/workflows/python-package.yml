@@ -14,7 +14,7 @@ jobs:
   container-test-job:
     runs-on: ubuntu-latest
     container:
-      image: docker.io/library/exodus:known_good
+      image: docker.io/ssinhaleite/sinabs-exodus-docker-image:known_good
       options: --gpus all
     steps:
       - name: Test CUDA access
