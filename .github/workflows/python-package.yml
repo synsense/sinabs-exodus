@@ -12,7 +12,7 @@ on:
 
 jobs:
   container-test-job:
-    runs-on: [self-hosted, linux]
+    runs-on: self-hosted
     container:
       image: docker.io/ssinhaleite/sinabs-exodus-docker-image:known_good
       options: --gpus all
