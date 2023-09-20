@@ -27,9 +27,14 @@ jobs:
       options: --gpus all
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
-
+        # Most recent PyTorch version - currently that's 2.01 -, together with CUDA 11.8
+        # PyTorch 1.13.1 with CUDA 11.6
+        # PyTorch 2.01 with CUDA 11.7
+        # PyTorch 1.13.1 with CUDA 11.7
+        # PyTorch 1.12.1 with CUDA 11.3
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -42,7 +47,8 @@ jobs:
         python -m pip install --upgrade setuptools
         python -m pip install flake8 pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        python -m pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
+        python -m conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.3 -c pytorch
+        
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
