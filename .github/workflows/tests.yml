@@ -60,7 +60,7 @@ jobs:
     
     - name: Install Exodus
       run: |
-        python -m pip --user install .
+        python -m pip install .
     
     - name: Test with pytest
       run: |
