@@ -1,6 +1,6 @@
 # This workflow will install Python dependencies, run tests, coverage and lint with a variety of Python versions
 
-name: Python automated tests
+name: Cuda11.8
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
   container-test-cuda:
     runs-on: self-hosted
     container:
-      image: docker.io/ssinhaleite/sinabs-exodus-docker-image:known_good
+      image: ghcr.io/synsense/sinabs-exodus:cuda11.8
       options: --gpus all
     steps:
       - name: Test CUDA access
@@ -22,19 +22,14 @@ jobs:
   build:
     runs-on: self-hosted
     container:
-      image: docker.io/ssinhaleite/sinabs-exodus-docker-image:known_good
+      image: ghcr.io/synsense/sinabs-exodus:cuda11.8
       options: --gpus all
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
-        # python-version: ["3.11"]
         # Most recent PyTorch version - currently that's 2.01 -, together with CUDA 11.8
-        # PyTorch 1.13.1 with CUDA 11.6
-        # PyTorch 2.01 with CUDA 11.7
-        # PyTorch 1.13.1 with CUDA 11.7
-        # PyTorch 1.12.1 with CUDA 11.3
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -48,7 +43,6 @@ jobs:
         python -m pip install --no-cache --upgrade setuptools --user
         python -m pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order --user
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        # python -m pip install --no-cache torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
         python -m pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --user
 
     - name: Lint with flake8
