@@ -1,7 +1,6 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+# This workflow will install Python dependencies, run tests, coverage and lint with a variety of Python versions
 
-name: Python package
+name: Python automated tests
 
 on:
   push:
@@ -42,15 +41,15 @@ jobs:
       uses: actions/setup-python@v3
       with:
         python-version: ${{ matrix.python-version }}
+        
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        python -m pip install --upgrade setuptools
-        python -m pip install wheel
-        python -m pip install flake8 pytest
+        python -m pip install --user --upgrade pip
+        python -m pip install --user --upgrade setuptools
+        python -m pip install --user wheel flake8 pytest pytest-cov
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        # python -m pip install torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
-        python -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+        # python -m pip install --user torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
+        python -m pip install --user torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 
     - name: Lint with flake8
       run: |
@@ -58,9 +57,34 @@ jobs:
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
     - name: Install Exodus
       run: |
-        python -m pip install .
+        python -m pip --user install .
+    
     - name: Test with pytest
       run: |
-        pytest
+        pytest -v tests/ --random-order
+
+    - name: Generate coverage report
+      run: pytest --cov --cov-report term --cov-report xml:./cobertura.xml -v tests/ --random-order
+
+    - name: Produce the coverage report
+      uses: insightsengineering/coverage-action@v2
+      with:
+        # Path to the Cobertura XML report.
+        path: ./cobertura.xml
+        # Minimum total coverage, if you want the workflow to enforce it as a standard.
+        # This has no effect if the `fail` arg is set to `false`.
+        threshold: 80.00
+        fail: false
+        # Publish the rendered output as a PR comment
+        publish: true
+        # Create a coverage diff report.
+        diff: true
+        # Branch to diff against.
+        # Compare the current coverage to the coverage determined on this branch.
+        diff-branch: main
+        # This is where the coverage reports for the `diff-branch` are stored.
+        # Branch is created if it doesn't already exist'.
+        diff-storage: _xml_coverage_reports
