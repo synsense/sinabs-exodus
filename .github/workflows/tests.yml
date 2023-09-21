@@ -44,12 +44,12 @@ jobs:
         
     - name: Install dependencies
       run: |
-        python -m pip install --no-cache --upgrade pip
-        python -m pip install --no-cache --upgrade setuptools
-        python -m pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order
+        python -m pip install --no-cache --upgrade pip --user
+        python -m pip install --no-cache --upgrade setuptools --user
+        python -m pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order --user
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         # python -m pip install --no-cache torch==1.12.1+cu113 torchvision==0.13.1+cu113 torchaudio==0.12.1 --extra-index-url https://download.pytorch.org/whl/cu113
-        python -m pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+        python -m pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --user
 
     - name: Lint with flake8
       run: |
@@ -60,7 +60,7 @@ jobs:
     
     - name: Install Exodus
       run: |
-        python -m pip install .
+        python -m pip install . --no-cache --user
     
     - name: Test with pytest
       run: |
@@ -77,7 +77,7 @@ jobs:
         # Minimum total coverage, if you want the workflow to enforce it as a standard.
         # This has no effect if the `fail` arg is set to `false`.
         threshold: 80.00
-        fail: false
+        fail: true
         # Publish the rendered output as a PR comment
         publish: true
         # Create a coverage diff report.
