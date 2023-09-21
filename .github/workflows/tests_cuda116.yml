@@ -1,0 +1,84 @@
+# This workflow will install Python dependencies, run tests, coverage and lint with a variety of Python versions
+
+name: Cuda11.6
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+
+jobs:
+  container-test-cuda:
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/synsense/sinabs-exodus:cuda11.6
+      options: --gpus all
+    steps:
+      - name: Test CUDA access
+        run: nvidia-smi
+
+  build:
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/synsense/sinabs-exodus:cuda11.6
+      options: --gpus all
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        # PyTorch version - 1.13.1, together with CUDA 11.6
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --no-cache --upgrade pip --user
+        python -m pip install --no-cache --upgrade setuptools --user
+        python -m pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order --user
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        python -m pip install --no-cache torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116 --user
+
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Install Exodus
+      run: |
+        python -m pip install . --no-cache --user
+    
+    - name: Test with pytest
+      run: |
+        pytest -v tests/ --random-order
+
+    - name: Generate coverage report
+      run: pytest --cov --cov-report term --cov-report xml:./cobertura.xml -v tests/ --random-order
+
+    - name: Produce the coverage report
+      uses: insightsengineering/coverage-action@v2
+      with:
+        # Path to the Cobertura XML report.
+        path: ./cobertura.xml
+        # Minimum total coverage, if you want the workflow to enforce it as a standard.
+        # This has no effect if the `fail` arg is set to `false`.
+        threshold: 80.00
+        fail: true
+        # Publish the rendered output as a PR comment
+        publish: true
+        # Create a coverage diff report.
+        diff: true
+        # Branch to diff against.
+        # Compare the current coverage to the coverage determined on this branch.
+        diff-branch: main
+        # This is where the coverage reports for the `diff-branch` are stored.
+        # Branch is created if it doesn't already exist'.
+        diff-storage: _xml_coverage_reports
