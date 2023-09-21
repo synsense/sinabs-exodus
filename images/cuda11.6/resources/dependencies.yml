@@ -1,0 +1,15 @@
+channels:
+  - defaults
+  - pytorch
+  - conda-forge
+dependencies:
+  - numpy
+  - scipy
+  - pip
+  - pip:
+    - wheel
+    - flake8
+    - pytest
+    - pytest-cov
+    - pytest-random-order
+    - sinabs

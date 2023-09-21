@@ -30,12 +30,12 @@ RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -
     eval "$(/root/miniconda/bin/conda shell.bash hook)" && conda init
 
 # Copy the requirements file for Sinabs-Exodus
-COPY ./resources/clean.yml ./
+COPY ./resources/dependencies.yml ./
 
 # Update the python environment
 RUN conda update --all && \
-    conda env update --name base --file clean.yml && \
-    rm -rf clean.yml
+    conda env update --name base --file dependencies.yml && \
+    rm -rf dependencies.yml
 
 ENV CUDA_HOME=/usr/local/cuda
 
