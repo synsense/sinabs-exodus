@@ -39,11 +39,11 @@ jobs:
         
     - name: Install dependencies
       run: |
-        python${{ matrix.python-version }} -m pip install --no-cache --upgrade pip --user
-        python${{ matrix.python-version }} -m pip install --no-cache --upgrade setuptools --user
+        # python${{ matrix.python-version }} -m pip install --no-cache --upgrade pip --user
+        # python${{ matrix.python-version }} -m pip install --no-cache --upgrade setuptools --user
         python${{ matrix.python-version }} -m pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order --user
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        python -m pip install --no-cache torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116 --user
+        if [ -f requirements.txt ]; then python${{ matrix.python-version }} -m pip install -r requirements.txt; fi
+        python${{ matrix.python-version }} -m pip install --no-cache torch==1.13.1+cu116 torchvision==0.14.1+cu116 torchaudio==0.13.1 --extra-index-url https://download.pytorch.org/whl/cu116 --user
 
     - name: Lint with flake8
       run: |
