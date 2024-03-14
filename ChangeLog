@@ -1,6 +1,11 @@
 CHANGES
 =======
 
+v1.2.1
+------
+* Support Sinabs 2.0
+* Support individual time constants
+
 v1.1.2
 ------
 * Update README

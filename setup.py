@@ -40,7 +40,6 @@ cmdclass.update({"clean": Cleaner})
 
 # Handle versions
 version = versioneer.get_version()
-version_major = version.split(".")[0]
 
 # Install
 setup(
@@ -63,6 +62,6 @@ setup(
         )
     ],
     cmdclass=cmdclass,
-    install_requires=["torch", "sinabs"],
+    install_requires=["torch", f"sinabs >= 1.2.9"],
 )
 
