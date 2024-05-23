@@ -117,7 +117,7 @@ def test_sinabs_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     model = SNN(
-        backend="sinabs",
+        spike_layer_class=sl.IAFSqueeze,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         batch_size=batch_size,
@@ -134,7 +134,7 @@ def test_exodus_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     model = SNN(
-        backend="exodus",
+        spike_layer_class=el.IAFSqueeze,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         batch_size=batch_size,
@@ -152,13 +152,13 @@ def test_exodus_sinabs_model_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     sinabs_model = SNN(
-        backend="sinabs",
+        spike_layer_class=sl.IAFSqueeze,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         batch_size=batch_size,
     ).cuda()
     exodus_model = SNN(
-        backend="exodus",
+        spike_layer_class=el.IAFSqueeze,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         batch_size=batch_size,
@@ -261,7 +261,7 @@ class ANN(nn.Sequential):
 class SNN(nn.Module):
     def __init__(
         self,
-        backend,
+        spike_layer_class,
         batch_size,
         n_input_channels=16,
         n_output_classes=10,
@@ -273,7 +273,7 @@ class SNN(nn.Module):
             n_input_channels=n_input_channels, n_output_classes=n_output_classes
         )
         self.network = from_model(
-            ann, backend=backend, spike_threshold=threshold, min_v_mem=min_v_mem, batch_size=batch_size
+            ann, spike_layer_class=spike_layer_class, spike_threshold=threshold, min_v_mem=min_v_mem, batch_size=batch_size
         ).spiking_model
 
     def reset_states(self):
