@@ -1,6 +1,10 @@
 CHANGES
 =======
 
+v1.2.2
+------
+* Update license to Apache 2.0
+
 v1.2.1
 ------
 * Support Sinabs 2.0
