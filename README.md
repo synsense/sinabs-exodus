@@ -136,7 +136,7 @@ or similar.
 
 ## License
 
-Sinabs-exodus is published under AGPL v3.0. See the LICENSE file for details.
+Sinabs-exodus is published under Apache v2.0. See the LICENSE file for details.
 
 ## Footnotes
 [^1]: Sumit Bam Shrestha and Garrick Orchard. "SLAYER: Spike Layer Error Reassignment in Time." 
