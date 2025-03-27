@@ -4,7 +4,7 @@ name: Cuda11.8
 
 on:
   push:
-    branches: [ "main" ]
+    branches: '**'
   pull_request:
     branches: [ "main" ]
 
