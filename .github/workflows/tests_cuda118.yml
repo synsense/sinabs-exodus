@@ -18,29 +18,3 @@ jobs:
     steps:
       - name: Test CUDA access
         run: nvidia-smi
-
-  build:
-    runs-on: self-hosted
-    container:
-      image: ssinhaleite/sinabs-exodus:cuda11.8
-      options: --gpus all
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
-        # Most recent PyTorch version - currently that's 2.01 -, together with CUDA 11.8
-    steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v3
-      with:
-        python-version: ${{ matrix.python-version }}
-         
-    - name: Install dependencies
-      run: |
-        python -m pip install --no-cache --upgrade pip --user
-        python -m pip install --no-cache --upgrade setuptools --user
-        python -m pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order --user
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        python -m pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --user
