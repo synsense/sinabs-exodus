@@ -9,17 +9,21 @@ from sinabs.layers.functional.lif import lif_forward
 v_mem_initials = (torch.zeros(2).cuda(), torch.rand(2).cuda() - 0.5)
 alphas = (torch.ones(2).cuda() * 0.9, torch.rand(2).cuda())
 thresholds = (torch.ones(2).cuda(), torch.tensor([0.3, 0.9]).cuda())
-min_v_mem = (None, -torch.ones(2).cuda(), torch.tensor([-0.3, -0.4]).cuda(), torch.tensor([1.2, 0]).cuda())
+min_v_mem = (
+    None,
+    -torch.ones(2).cuda(),
+    torch.tensor([-0.3, -0.4]).cuda(),
+    torch.tensor([1.2, 0]).cuda(),
+)
 membrane_subtract = (None, torch.tensor([0.1, 0.2]).cuda())
 
 argvals = (v_mem_initials, alphas, thresholds, min_v_mem, membrane_subtract)
 combined_args = product(*argvals)
 argnames = "v_mem_initial,alpha,threshold,min_v_mem,membrane_subtract"
 
+
 @pytest.mark.parametrize(argnames, combined_args)
-def test_integratefire(
-    v_mem_initial, alpha, threshold, min_v_mem, membrane_subtract
-):
+def test_integratefire(v_mem_initial, alpha, threshold, min_v_mem, membrane_subtract):
     inp = torch.rand((2, 10), requires_grad=True, device="cuda")
     surrogate_gradient_fn = sa.Heaviside(0)
 
@@ -55,11 +59,13 @@ argvals_ext = (
     v_mem_initials,
     alphas,
     thresholds,
-    min_v_mem[:-1], # Avoid min_v_mem > thr error
+    min_v_mem[:-1],  # Avoid min_v_mem > thr error
     membrane_subtract,
     backward_varnames,
 )
 combined_args_ext = product(*argvals_ext)
+
+
 @pytest.mark.parametrize(argnames + ",backward_var", combined_args_ext)
 def test_compare_integratefire(
     v_mem_initial, alpha, threshold, min_v_mem, membrane_subtract, backward_var
@@ -134,7 +140,9 @@ def test_compare_integratefire(
         (out_sinabs * w_out + (vmem_sinabs * w_vmem).unsqueeze(1)).sum().backward()
 
     assert torch.allclose(input_sinabs.grad, input_exodus.grad, rtol=1e-4, atol=1e-6)
-    assert torch.allclose(v_mem_init_sinabs.grad, v_mem_init_exodus.grad, rtol=1e-4, atol=1e-6)
+    assert torch.allclose(
+        v_mem_init_sinabs.grad, v_mem_init_exodus.grad, rtol=1e-4, atol=1e-6
+    )
     assert torch.allclose(alpha_sinabs.grad, alpha_exodus.grad, rtol=1e-4, atol=1e-6)
 
 
@@ -157,11 +165,13 @@ def evolve_exodus(
     threshold = threshold.expand(expanded_shape).flatten().contiguous()
     if min_v_mem is not None:
         min_v_mem = min_v_mem.expand(expanded_shape).flatten().contiguous()
-    
+
     if membrane_subtract is None:
         membrane_subtract = threshold
     else:
-        membrane_subtract = membrane_subtract.expand(expanded_shape).flatten().contiguous()
+        membrane_subtract = (
+            membrane_subtract.expand(expanded_shape).flatten().contiguous()
+        )
 
     for inp in data:
         inp = inp.movedim(1, -1).reshape(-1, timesteps)

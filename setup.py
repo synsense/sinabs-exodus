@@ -22,16 +22,22 @@ else:
         os.environ["CC"] = "c++"
         os.environ["CXX"] = "c++"
 
+
 # Class for clean command
 class Cleaner(Command):
     """Clean command to tidy up after building"""
+
     user_options = []
+
     def initialize_options(self):
         pass
+
     def finalize_options(self):
         pass
+
     def run(self):
         os.system("rm -vrf ./build ./dist ./*pyc ./*egg-info")
+
 
 # Update cmdclass
 cmdclass = versioneer.get_cmdclass()
@@ -43,20 +49,20 @@ version = versioneer.get_version()
 
 # Install
 setup(
-    name='sinabs-exodus',
+    name="sinabs-exodus",
     version=version,
-    packages=['sinabs.exodus', 'sinabs.exodus.layers'],
+    packages=["sinabs.exodus", "sinabs.exodus.layers"],
     ext_modules=[
         CUDAExtension(
-            name='exodus_cuda',
+            name="exodus_cuda",
             sources=[
-                'cuda/bindings.cu',
+                "cuda/bindings.cu",
                 # 'cuda/leaky_bindings.cu',
                 # 'cuda/experimental_bindings.cu',
             ],
             depends=[
-                'cuda/lif_kernels.h'
-                'cuda/leaky_kernels.h'
+                "cuda/lif_kernels.h"
+                "cuda/leaky_kernels.h"
                 # 'cuda/experimental_kernels.h'
             ],
         )
@@ -64,4 +70,3 @@ setup(
     cmdclass=cmdclass,
     install_requires=["torch", f"sinabs >= 1.2.9"],
 )
-

@@ -95,6 +95,8 @@ atol = 1e-8
 rtol = 1e-3
 
 args = product((True, False), (True, False))
+
+
 @pytest.mark.parametrize("train_alphas,norm_input", args)
 def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input):
     batch_size, time_steps = 10, 100
@@ -140,15 +142,15 @@ def test_exodus_vs_sinabs_compare_grads_single_layer_simplified():
     tau_mem = 20.0
     train_alphas = True
     norm_input = False
-    
+
     sinabs_model = sl.ExpLeak(
-        tau_mem=torch.ones((n_channels ,)) * tau_mem,
+        tau_mem=torch.ones((n_channels,)) * tau_mem,
         norm_input=norm_input,
         train_alphas=train_alphas,
         record_states=True,
     ).cuda()
     exodus_model = el.ExpLeak(
-        tau_mem=torch.ones((n_channels ,)) * tau_mem,
+        tau_mem=torch.ones((n_channels,)) * tau_mem,
         norm_input=norm_input,
         train_alphas=train_alphas,
         record_states=True,
@@ -160,7 +162,7 @@ def test_exodus_vs_sinabs_compare_grads_single_layer_simplified():
 
     # Alpha-gradients for each time step
     def get_alpha_grads(model):
-        """ Get alpha gradients at specific time step """
+        """Get alpha gradients at specific time step"""
         model.zero_grad()
         model.reset_states()
         # model.v_mem = initial_state.clone()

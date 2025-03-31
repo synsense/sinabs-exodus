@@ -2,11 +2,12 @@
 
 name: Cuda11.8
 
-on:
+on:  
   push:
-    branches: "**"
+    branches: [ "**" ]
   pull_request:
     branches: [ "main" ]
+
 
 jobs:
   container-test-cuda:
@@ -17,6 +18,14 @@ jobs:
     steps:
       - name: Test CUDA access
         run: nvidia-smi
+
+  lint:
+    runs-on: self-hosted
+    container:
+      image: ssinhaleite/sinabs-exodus:cuda11.8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: psf/black@stable
 
   build:
     runs-on: self-hosted
@@ -38,11 +47,11 @@ jobs:
          
     - name: Install dependencies
       run: |
-        pip install --no-cache --upgrade pip --user
-        pip install --no-cache --upgrade setuptools --user
-        pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order --user
+        pip install --no-cache --upgrade pip
+        pip install --no-cache --upgrade setuptools
+        pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 --user
+        pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -51,7 +60,7 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics    
     - name: Install Exodus
       run: |
-        pip install . --no-cache --user
+        pip install . --no-cache
     - name: Test with pytest
       run: |
         pytest -v tests/ --random-order

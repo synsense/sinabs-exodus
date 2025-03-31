@@ -13,6 +13,7 @@ class LIFSplit(LIF):
     Same as LIF but leaky integration and spike generation are implemented internally
     by two separate functions.
     """
+
     def forward(self, spike_input: "torch.tensor") -> "torch.tensor":
         """
         Generate membrane potential and resulting output spike train based on
@@ -45,10 +46,7 @@ class LIFSplit(LIF):
         spike_input = spike_input.movedim(1, -1).reshape(-1, num_timesteps)
 
         filtered_input = LeakyIntegrator.apply(
-            spike_input.contiguous(),
-            self.v_mem.flatten(),
-            self.alpha_mem,
-            False
+            spike_input.contiguous(), self.v_mem.flatten(), self.alpha_mem, False
         )
 
         output_spikes, v_mem_full = SpikeFunction.apply(
@@ -73,10 +71,11 @@ class LIFSplit(LIF):
 
         return output_spikes
 
+
 def build_exodus_model(
     n_channels=16,
     n_classes=10,
-    tau_mem=10.,
+    tau_mem=10.0,
     threshold=1.0,
     min_v_mem=-1,
     norm_input=False,
@@ -113,7 +112,7 @@ def build_exodus_model(
 def build_split_model(
     n_channels=16,
     n_classes=10,
-    tau_mem=10.,
+    tau_mem=10.0,
     threshold=1.0,
     min_v_mem=-1,
     norm_input=False,
@@ -234,7 +233,9 @@ def backward_pass(num_spikes_exodus, num_spikes_split):
     g_split = [p.grad for p in split_model.parameters()][0]
 
     # Correlation between gradients. (numpy seems more accurate here)
-    corr = np.corrcoef(g_exodus.flatten().detach().cpu(), g_split.flatten().detach().cpu())
+    corr = np.corrcoef(
+        g_exodus.flatten().detach().cpu(), g_split.flatten().detach().cpu()
+    )
     print(f"\tGrad correlation: {corr[0,1]}")
 
     # Mean relative deviation
@@ -248,6 +249,7 @@ def backward_pass(num_spikes_exodus, num_spikes_split):
     # Compare mean difference to find systematic errors
     mrds = torch.mean((g_exodus - g_split) / (g_exodus + 1e-5))
     print(f"\tGrad mean signed rel diff: {mrds}")
+
 
 if __name__ == "__main__":
     num_spikes_exodus, num_spikes_split = forward_pass()
