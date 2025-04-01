@@ -67,9 +67,9 @@ jobs:
       run: |
         pip install pytest pytest-cov
         pip install . --no-cache
-        pytest -v tests/
+        python -m pytest -v tests/
     - name: Generate coverage report
-      run: pytest --cov --cov-report term --cov-report xml:./coverage.xml -v tests/
+      run: python -m pytest --cov --cov-report term --cov-report xml:./coverage.xml -v tests/
     - name: Produce the coverage report
       uses: insightsengineering/coverage-action@v2
       with:
