@@ -61,12 +61,8 @@ jobs:
     - name: Install Exodus
       run: |
         pip install . --no-cache
-    - name: Display Python version
-      run: python -c "import sys; print(sys.version)"
     - name: Test with pytest
       run: |
-        pip install pytest pytest-cov
-        pip install . --no-cache
         python -m pytest -v tests/
     - name: Generate coverage report
       run: python -m pytest --cov --cov-report term --cov-report xml:./coverage.xml -v tests/
@@ -74,7 +70,7 @@ jobs:
       uses: insightsengineering/coverage-action@v2
       with:
         # Path to the Cobertura XML report.
-        path: ./cobertura.xml
+        path: ./coverage.xml
         # Minimum total coverage, if you want the workflow to enforce it as a standard.
         # This has no effect if the `fail` arg is set to `false`.
         threshold: 80.00
