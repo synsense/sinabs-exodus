@@ -13,7 +13,7 @@ jobs:
   container-test-cuda:
     runs-on: self-hosted
     container:
-      image: ssinhaleite/sinabs-exodus:cuda11.8
+      image: ghcr.io/synsense/sinabs-exodus:cuda11.8
       options: --gpus all
     steps:
       - name: Test CUDA access
@@ -22,7 +22,7 @@ jobs:
   lint:
     runs-on: self-hosted
     container:
-      image: ssinhaleite/sinabs-exodus:cuda11.8
+      image: ghcr.io/synsense/sinabs-exodus:cuda11.8
     steps:
       - uses: actions/checkout@v4
       - uses: psf/black@stable
@@ -30,7 +30,7 @@ jobs:
   build:
     runs-on: self-hosted
     container:
-      image: ssinhaleite/sinabs-exodus:cuda11.8
+      image: ghcr.io/synsense/sinabs-exodus:cuda11.8
       options: --gpus all
     strategy:
       fail-fast: false
