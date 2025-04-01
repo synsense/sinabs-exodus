@@ -5,4 +5,12 @@ channels:
 dependencies:
   - numpy
   - scipy
+  - pytest
+  - pytest-cov
+  - flake8
+  - sinabs
+  - pip:
+    - torch
+    - torchvision
+    - torchaudio
 
