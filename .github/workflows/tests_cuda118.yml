@@ -1,4 +1,4 @@
-# This workflow will install Python dependencies, run tests, coverage and lint with a variety of Python versions
+# This workflow will install Python dependencies, run tests, coverage, and lint with a variety of Python versions
 
 name: Cuda11.8
 
@@ -69,7 +69,7 @@ jobs:
     - name: Produce the coverage report
       uses: insightsengineering/coverage-action@v2
       with:
-        # Path to the Cobertura XML report.
+        # Path to the coverage XML report.
         path: ./coverage.xml
         # Minimum total coverage, if you want the workflow to enforce it as a standard.
         # This has no effect if the `fail` arg is set to `false`.
