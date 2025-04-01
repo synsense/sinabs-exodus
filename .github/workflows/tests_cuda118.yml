@@ -52,20 +52,20 @@ jobs:
         pip install --no-cache wheel flake8 pytest pytest-cov pytest-random-order
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-    # - name: Lint with flake8
-    #   run: |
-    #     # stop the build if there are Python syntax errors or undefined names
-    #     flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-    #     # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-    #     flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics    
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics    
     - name: Install Exodus
       run: |
         pip install . --no-cache
     - name: Test with pytest
       run: |
-        pytest -v tests/ --random-order
+        pytest -v tests/
     - name: Generate coverage report
-      run: pytest --cov --cov-report term --cov-report xml:./cobertura.xml -v tests/ --random-order
+      run: pytest --cov --cov-report term --cov-report xml:./cobertura.xml -v tests/
     - name: Produce the coverage report
       uses: insightsengineering/coverage-action@v2
       with:
