@@ -117,7 +117,7 @@ def test_sinabs_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     model = SNN(
-        backend="sinabs",
+        spike_layer_class=sl.IAFSqueeze,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         batch_size=batch_size,
@@ -134,7 +134,7 @@ def test_exodus_model():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     model = SNN(
-        backend="exodus",
+        spike_layer_class=el.IAFSqueeze,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         batch_size=batch_size,
@@ -152,26 +152,28 @@ def test_exodus_sinabs_model_equal_output():
     batch_size, time_steps = 10, 100
     n_input_channels, n_output_classes = 16, 10
     sinabs_model = SNN(
-        backend="sinabs",
+        spike_layer_class=sl.IAFSqueeze,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         batch_size=batch_size,
     ).cuda()
     exodus_model = SNN(
-        backend="exodus",
+        spike_layer_class=el.IAFSqueeze,
         n_input_channels=n_input_channels,
         n_output_classes=n_output_classes,
         batch_size=batch_size,
     ).cuda()
     # make sure the weights for linear layers are the same
-    for (sinabs_layer, exodus_layer) in zip(
+    for sinabs_layer, exodus_layer in zip(
         sinabs_model.linear_layers, exodus_model.linear_layers
     ):
         sinabs_layer.load_state_dict(exodus_layer.state_dict())
     assert (
         sinabs_model.linear_layers[0].weight == exodus_model.linear_layers[0].weight
     ).all()
-    input_data = torch.rand((n_epochs, batch_size, time_steps, n_input_channels)).cuda() * 1e5
+    input_data = (
+        torch.rand((n_epochs, batch_size, time_steps, n_input_channels)).cuda() * 1e5
+    )
 
     # Iterate over a few epochs to make sure states are propagated correctly
     for inp_epoch in input_data:
@@ -197,7 +199,7 @@ def test_exodus_vs_sinabs_compare_grads():
     ).cuda()
 
     # make sure the weights for linear layers are the same
-    for (sinabs_layer, exodus_layer) in zip(
+    for sinabs_layer, exodus_layer in zip(
         sinabs_model.linear_layers, exodus_model.linear_layers
     ):
         sinabs_layer.load_state_dict(exodus_layer.state_dict())
@@ -228,11 +230,8 @@ def test_exodus_vs_sinabs_compare_grads():
     ]
     print(f"Runtime exodus: {time.time() - t_start}")
 
-
     # - Compare neuron states
-    for (l_sin, l_slyr) in zip(
-        sinabs_model.spiking_layers, exodus_model.spiking_layers
-    ):
+    for l_sin, l_slyr in zip(sinabs_model.spiking_layers, exodus_model.spiking_layers):
         assert torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
 
     # - Compare outputs
@@ -261,7 +260,7 @@ class ANN(nn.Sequential):
 class SNN(nn.Module):
     def __init__(
         self,
-        backend,
+        spike_layer_class,
         batch_size,
         n_input_channels=16,
         n_output_classes=10,
@@ -269,11 +268,13 @@ class SNN(nn.Module):
         min_v_mem=None,
     ):
         super().__init__()
-        ann = ANN(
-            n_input_channels=n_input_channels, n_output_classes=n_output_classes
-        )
+        ann = ANN(n_input_channels=n_input_channels, n_output_classes=n_output_classes)
         self.network = from_model(
-            ann, backend=backend, spike_threshold=threshold, min_v_mem=min_v_mem, batch_size=batch_size
+            ann,
+            spike_layer_class=spike_layer_class,
+            spike_threshold=threshold,
+            min_v_mem=min_v_mem,
+            batch_size=batch_size,
         ).spiking_model
 
     def reset_states(self):

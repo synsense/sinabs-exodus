@@ -82,7 +82,7 @@ class IAF(LIF):
 
     @property
     def alpha_mem_calculated(self):
-        return torch.tensor(1.).to(self.v_mem.device)
+        return torch.tensor(1.0).to(self.v_mem.device)
 
     @property
     def _param_dict(self) -> dict:

@@ -62,7 +62,7 @@ class SpikeFunction(torch.autograd.Function):
             threshold,
             0 if min_v_mem is None else threshold,  # min_v_mem
             min_v_mem is not None,  # Apply min_v_mem
-            -1 if max_num_spikes_per_bin is None else max_num_spikes_per_bin
+            -1 if max_num_spikes_per_bin is None else max_num_spikes_per_bin,
         )
 
         ctx.alpha = alpha
@@ -212,12 +212,18 @@ class IntegrateAndFire(torch.autograd.Function):
         # however, vmem_initial should already have reset applied
         if alpha.requires_grad:
             ctx.save_for_backward(
-                output_spikes, v_mem, v_mem_init, alpha, membrane_subtract, threshold, min_v_mem
+                output_spikes,
+                v_mem,
+                v_mem_init,
+                alpha,
+                membrane_subtract,
+                threshold,
+                min_v_mem,
             )
         else:
             ctx.save_for_backward(v_mem, alpha, membrane_subtract, threshold, min_v_mem)
         ctx.get_alpha_grads = alpha.requires_grad
-        
+
         return output_spikes, v_mem
 
     @staticmethod
@@ -227,9 +233,17 @@ class IntegrateAndFire(torch.autograd.Function):
         #     raise NotImplementedError(
         #         "Direct Backpropagation through membrane potential is currently not supported."
         #     )
-        
+
         if ctx.get_alpha_grads:
-            (output_spikes, v_mem, v_mem_init, alpha, membrane_subtract, threshold, min_v_mem) = ctx.saved_tensors
+            (
+                output_spikes,
+                v_mem,
+                v_mem_init,
+                alpha,
+                membrane_subtract,
+                threshold,
+                min_v_mem,
+            ) = ctx.saved_tensors
         else:
             (v_mem, alpha, membrane_subtract, threshold, min_v_mem) = ctx.saved_tensors
 

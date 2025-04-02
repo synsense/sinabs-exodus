@@ -180,7 +180,7 @@ def test_exodus_sinabs_model_equal_output(norm_input):
         norm_input=norm_input,
     ).cuda()
     # make sure the weights for linear layers are the same
-    for (sinabs_layer, exodus_layer) in zip(
+    for sinabs_layer, exodus_layer in zip(
         sinabs_model.linear_layers, exodus_model.linear_layers
     ):
         sinabs_layer.load_state_dict(exodus_layer.state_dict())
@@ -195,7 +195,10 @@ def test_exodus_sinabs_model_equal_output(norm_input):
     assert spike_output_sinabs.sum() == spike_output_exodus.sum()
     assert (spike_output_sinabs == spike_output_exodus).all()
 
+
 args = product((True, False), (True, False), (True, False))
+
+
 @pytest.mark.parametrize("train_alphas,norm_input,train_time_consts", args)
 def test_exodus_sinabs_state_transfer(train_alphas, norm_input, train_time_consts):
     batch_size, time_steps = 10, 100
@@ -221,14 +224,14 @@ def test_exodus_sinabs_state_transfer(train_alphas, norm_input, train_time_const
 
     # make sure the weights for linear layers are the same
     sinabs_model.load_state_dict(exodus_model.state_dict())
-    
+
     input_data = torch.rand((batch_size, time_steps, n_input_channels)).cuda()
     if not norm_input:
         input_data *= 5e-2
 
     sinabs_out = sinabs_model(input_data)
     exodus_out = exodus_model(input_data)
-    
+
     # - Export parameters from exodus to sinabs
     new_sinabs_model = SinabsLIFModel(**model_kwargs).cuda()
     new_sinabs_model(input_data)  # Enforce state initialization
@@ -247,6 +250,8 @@ def test_exodus_sinabs_state_transfer(train_alphas, norm_input, train_time_const
 
 
 args = product((True, False), (True, False), (True, False))
+
+
 @pytest.mark.parametrize("train_alphas,norm_input,train_time_consts", args)
 def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_consts):
     n_epochs = 2
@@ -272,7 +277,7 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
                 p.requires_grad_(False)
 
     # make sure the weights for linear layers are the same
-    for (sinabs_layer, exodus_layer) in zip(
+    for sinabs_layer, exodus_layer in zip(
         sinabs_model.linear_layers, exodus_model.linear_layers
     ):
         sinabs_layer.load_state_dict(exodus_layer.state_dict())
@@ -310,9 +315,7 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
         atol = 1e-7
         rtol = 1e-2
 
-    for (l_sin, l_slyr) in zip(
-        exodus_model.spiking_layers, sinabs_model.spiking_layers
-    ):
+    for l_sin, l_slyr in zip(exodus_model.spiking_layers, sinabs_model.spiking_layers):
         assert torch.allclose(l_sin.v_mem, l_slyr.v_mem, atol=atol, rtol=rtol)
 
     assert (sinabs_out == exodus_out).all()
@@ -348,6 +351,8 @@ def test_exodus_vs_sinabs_compare_grads(train_alphas, norm_input, train_time_con
 
 
 args = product((True, False), (True, False), (None, 30))
+
+
 @pytest.mark.parametrize("train_alphas,norm_input,tau_syn", args)
 def test_exodus_vs_sinabs_compare_grads_single_layer(train_alphas, norm_input, tau_syn):
     batch_size, time_steps = 2, 10
@@ -620,6 +625,7 @@ class ExodusLIFModel(nn.Sequential):
     @property
     def linear_layers(self):
         return [self[0], self[3], self[6]]
+
 
 def correlation_and_scale(a, b):
     sum_of_sqrs_a = (a**2).sum()

@@ -16,6 +16,7 @@ from sinabs.exodus.spike import IntegrateAndFire
 
 __all__ = ["LIF", "LIFSqueeze"]
 
+
 def expand_to_1d_contiguous(
     value: Union[float, torch.Tensor], shape: Tuple[int]
 ) -> torch.Tensor:
@@ -184,9 +185,7 @@ class LIF(LIFSinabs):
     def _forward_synaptic(self, input_2d: torch.Tensor):
         """Evolve synaptic dynamics"""
 
-        alpha_syn = expand_to_1d_contiguous(
-            self.alpha_syn_calculated, self.v_mem.shape
-        )
+        alpha_syn = expand_to_1d_contiguous(self.alpha_syn_calculated, self.v_mem.shape)
 
         if self.decay_early:
             input_2d = input_2d * alpha_syn.unsqueeze(1)
@@ -202,9 +201,7 @@ class LIF(LIFSinabs):
         """Evolve membrane dynamics"""
 
         # Broadcast alpha to number of neurons (x batches)
-        alpha_mem = expand_to_1d_contiguous(
-            self.alpha_mem_calculated, self.v_mem.shape
-        )
+        alpha_mem = expand_to_1d_contiguous(self.alpha_mem_calculated, self.v_mem.shape)
 
         if self.norm_input:
             # Rescale input with 1 - alpha (based on approximation that
@@ -234,9 +231,7 @@ class LIF(LIFSinabs):
         if self.min_v_mem is None:
             min_v_mem = None
         else:
-            min_v_mem = expand_to_1d_contiguous(
-                self.min_v_mem, self.v_mem.shape
-            )
+            min_v_mem = expand_to_1d_contiguous(self.min_v_mem, self.v_mem.shape)
 
         # Expand membrane subtract
         membrane_subtract = self.reset_fn.subtract_value
@@ -313,6 +308,7 @@ class LIF(LIFSinabs):
 
     def __repr__(self):
         return "EXODUS " + super().__repr__()
+
 
 class LIFSqueeze(LIF, SqueezeMixin):
     """
