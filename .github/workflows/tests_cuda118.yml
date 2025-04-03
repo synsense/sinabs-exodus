@@ -102,6 +102,7 @@ jobs:
       - name: Install build packages
         run: |
           pip install wheel pbr setuptools
+          pip install --no-cache torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
       - name: Build a binary wheel and a source tarball
         run: python setup.py sdist bdist_wheel
       - name: Publish distribution package to PyPI
