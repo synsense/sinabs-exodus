@@ -88,7 +88,10 @@ jobs:
 
   build-and-publish:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/synsense/sinabs-exodus:cuda11.8
+      options: --gpus all
     if: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/') }}
     steps:
       - uses: actions/checkout@v3
