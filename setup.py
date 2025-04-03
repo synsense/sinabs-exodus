@@ -58,10 +58,7 @@ setup(
             sources=[
                 "cuda/bindings.cu",
             ],
-            depends=[
-                "cuda/lif_kernels.h"
-                "cuda/leaky_kernels.h"
-            ],
+            depends=["cuda/lif_kernels.h" "cuda/leaky_kernels.h"],
         )
     ],
     cmdclass=cmdclass,
