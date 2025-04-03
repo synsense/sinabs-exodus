@@ -1,6 +1,5 @@
 /*
- * Author: Felix Bauer, loosesly based on slayerPytorch library by Sumit Bam Shrestha
- * Contains routines in experimental stage to compute forward and backward passes
+ * This file contain routines in experimental stage to compute forward and backward passes
  * for the following neuron dynamics
  * - leaky and non-leaky integrate-and-fire (different implementation)
  * - spike-function for given membrane potential

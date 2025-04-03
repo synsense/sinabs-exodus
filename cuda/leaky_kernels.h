@@ -1,6 +1,5 @@
 /*
- * Author: Felix Bauer, loosely based on slayerPytorch library by Sumit Bam Shrestha
- * Contains routines to compute forward and backward passes
+ * This file contains routines to compute forward and backward passes
  * for the following neuron dynamics
  * - non-spiking leaky integrator
  */
