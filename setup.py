@@ -57,13 +57,10 @@ setup(
             name="exodus_cuda",
             sources=[
                 "cuda/bindings.cu",
-                # 'cuda/leaky_bindings.cu',
-                # 'cuda/experimental_bindings.cu',
             ],
             depends=[
                 "cuda/lif_kernels.h"
                 "cuda/leaky_kernels.h"
-                # 'cuda/experimental_kernels.h'
             ],
         )
     ],

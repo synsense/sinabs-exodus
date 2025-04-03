@@ -6,8 +6,6 @@ Sinabs-exodus is a plugin to the [sinabs](https://sinabs.ai) spiking neural netw
 
 The tool is based on [EXODUS](https://arxiv.org/abs/2205.10242), a formulation of backpropagation-through-time with surrogate gradients, that allows for efficient parallelization. EXODUS stands for _**EX**act calculation **O**f **D**erivatives as **U**pdate to **S**LAYER_. It builds upon the SLAYER[^1] algorithm, but uses mathematically accurate gradients and tends to be more robust to surrogate gradient scaling, making training less prone to suffer from exploding or vanishing gradients.
 
-Some of the code in this library is loosely based upon [slayerPytorch](https://github.com/bamsumit/slayerPytorch), the python implementation of SLAYER.
-
 If you use any of this code please cite the following publication:
 ```
 @article{bauer2022exodus,
